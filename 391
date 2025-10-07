@@ -1,0 +1,117 @@
+/*
+		          # Criação da Tabela de Empresas
+		          Cria a tabela principal para armazenar os dados de cada empresa (tenant) no sistema.
+
+		          ## Query Description: Esta operação é estrutural e segura. Ela cria uma nova tabela `empresas` e um bucket de armazenamento para logos, sem afetar dados existentes.
+		          
+		          ## Metadata:
+		          - Schema-Category: "Structural"
+		          - Impact-Level: "Low"
+		          - Requires-Backup: false
+		          - Reversible: true
+		          
+		          ## Structure Details:
+		          - Tabela: `public.empresas`
+		          - Colunas: id, razao_social, cnpj, endereco, etc.
+		          - Bucket: `storage.logos`
+		          
+		          ## Security Implications:
+		          - RLS Status: Enabled
+		          - Policy Changes: Yes (Cria políticas para a nova tabela e bucket)
+		          - Auth Requirements: Policies são definidas para `anon` e `authenticated`.
+		          
+		          ## Performance Impact:
+		          - Indexes: Adiciona um índice na coluna `id`.
+		          - Triggers: Nenhum.
+		          - Estimated Impact: Nenhum impacto em performance existente.
+		          */
+
+		-- Tabela para armazenar os dados das empresas (tenants)
+		CREATE TABLE IF NOT EXISTS public.empresas (
+		    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+		    razao_social VARCHAR(120) NOT NULL,
+		    nome_completo VARCHAR(120),
+		    fantasia VARCHAR(60),
+		    
+		    -- Endereço
+		    cep VARCHAR(9),
+		    logradouro VARCHAR(120),
+		    numero VARCHAR(10),
+		    sem_numero BOOLEAN DEFAULT false,
+		    complemento VARCHAR(60),
+		    bairro VARCHAR(60),
+		    cidade VARCHAR(60),
+		    uf VARCHAR(2),
+
+		    -- Contato
+		    fone VARCHAR(20),
+		    fax VARCHAR(20),
+		    celular VARCHAR(20),
+		    email VARCHAR(255),
+		    website VARCHAR(255),
+
+		    -- Regime
+		    segmento VARCHAR(50),
+		    tipo_pessoa VARCHAR(20),
+		    cnpj VARCHAR(18) UNIQUE,
+		    cpf VARCHAR(14),
+		    ie VARCHAR(20),
+		    ie_isento BOOLEAN DEFAULT false,
+		    im VARCHAR(20),
+		    cnae VARCHAR(10),
+		    crt VARCHAR(50),
+
+		    -- Preferências de Contato
+		    preferencias_contato_como_chamar VARCHAR(60),
+		    preferencias_contato_canais TEXT,
+
+		    -- Administrador
+		    administrador_nome VARCHAR(120),
+		    administrador_email VARCHAR(255),
+		    administrador_celular VARCHAR(20),
+
+		    -- Logo
+		    logo_url TEXT,
+
+		    created_at TIMESTAMPTZ DEFAULT NOW(),
+		    updated_at TIMESTAMPTZ DEFAULT NOW()
+		);
+
+		-- Tabela para inscrições estaduais de substituto tributário
+		CREATE TABLE IF NOT EXISTS public.empresa_substitutos_tributarios (
+		    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+		    empresa_id uuid NOT NULL REFERENCES public.empresas(id) ON DELETE CASCADE,
+		    uf VARCHAR(2) NOT NULL,
+		    ie VARCHAR(20) NOT NULL,
+		    UNIQUE(empresa_id, uf)
+		);
+
+
+		-- Habilita RLS
+		ALTER TABLE public.empresas ENABLE ROW LEVEL SECURITY;
+		ALTER TABLE public.empresa_substitutos_tributarios ENABLE ROW LEVEL SECURITY;
+
+		-- Políticas de Acesso (Iniciais e permissivas, serão ajustadas com a implementação de usuários)
+		DROP POLICY IF EXISTS "Allow all for anon" ON public.empresas;
+		CREATE POLICY "Allow all for anon" ON public.empresas FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+		DROP POLICY IF EXISTS "Allow all for anon" ON public.empresa_substitutos_tributarios;
+		CREATE POLICY "Allow all for anon" ON public.empresa_substitutos_tributarios FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+		-- Bucket para logos
+		INSERT INTO storage.buckets (id, name, public)
+		VALUES ('logos', 'logos', true)
+		ON CONFLICT (id) DO NOTHING;
+
+		-- Políticas de acesso ao bucket de logos
+		DROP POLICY IF EXISTS "Logo images are publicly accessible." ON storage.objects;
+		CREATE POLICY "Logo images are publicly accessible." ON storage.objects FOR SELECT USING (bucket_id = 'logos');
+
+		DROP POLICY IF EXISTS "Anyone can upload a logo." ON storage.objects;
+		CREATE POLICY "Anyone can upload a logo." ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'logos');
+
+		DROP POLICY IF EXISTS "Anyone can update their own logo." ON storage.objects;
+		CREATE POLICY "Anyone can update their own logo." ON storage.objects FOR UPDATE USING (bucket_id = 'logos');
+
+		DROP POLICY IF EXISTS "Anyone can delete their own logo." ON storage.objects;
+		CREATE POLICY "Anyone can delete their own logo." ON storage.objects FOR DELETE USING (bucket_id = 'logos');

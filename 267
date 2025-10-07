@@ -1,0 +1,31 @@
+import { BaseRepository } from './BaseRepository';
+		import { NotaEntrada, NotaEntradaItem } from '../types';
+		import { camelToSnake, snakeToCamel } from '../lib/utils';
+
+		export class NotaEntradaRepository extends BaseRepository<NotaEntrada> {
+		  constructor() {
+		    super('notas_entrada');
+		  }
+
+		  protected createEntity(data: any): NotaEntrada {
+		    return data as NotaEntrada;
+		  }
+
+		  async findAll(options: { page?: number; pageSize?: number } = {}): Promise<{ data: NotaEntrada[]; count: number }> {
+		    console.warn('[Modo de Construção] Chamada para NotaEntradaRepository.findAll bloqueada.');
+		    return { data: [], count: 0 };
+		  }
+
+		  async findById(id: string): Promise<NotaEntrada | null> {
+		    console.warn('[Modo de Construção] Chamada para NotaEntradaRepository.findById bloqueada.');
+		    return null;
+		  }
+
+		  async createWithItems(
+		    notaData: Omit<NotaEntrada, 'id' | 'createdAt' | 'updatedAt' | 'itens'>,
+		    itensData: Omit<NotaEntradaItem, 'id' | 'createdAt' | 'updatedAt' | 'notaEntradaId'>[]
+		  ): Promise<NotaEntrada> {
+		    console.warn('[Modo de Construção] Chamada para NotaEntradaRepository.createWithItems bloqueada.');
+		    throw new Error("Funcionalidade desativada durante a reconstrução.");
+		  }
+		}

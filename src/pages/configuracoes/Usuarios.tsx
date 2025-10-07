@@ -1,0 +1,103 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
+import { Plus, Filter, Mail, KeyRound } from 'lucide-react';
+import { GlassCard } from '../../components/ui/GlassCard';
+import { GlassButton } from '../../components/ui/GlassButton';
+import { GlassInput } from '../../components/ui/GlassInput';
+import { DataTable } from '../../components/ui/DataTable';
+import { useModalForm } from '../../hooks/useModalForm';
+import { Perfil } from '../../types';
+import { useService } from '../../hooks/useService';
+import { ConvidarUsuarioModal } from '../../components/settings/usuarios/ConvidarUsuarioModal';
+import toast from 'react-hot-toast';
+import { supabase } from '../../lib/supabaseClient';
+
+export const Usuarios: React.FC = () => {
+  const [usuarios, setUsuarios] = useState<Perfil[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string|null>(null);
+  const { isFormOpen, handleOpenCreateForm, handleCloseForm } = useModalForm();
+  const [filtro, setFiltro] = useState('');
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchUsuarios = async () => {
+      setLoading(true);
+      const { data, error } = await supabase.from('perfis').select('*');
+      if (error) {
+        setError(error.message);
+        toast.error(error.message);
+      } else {
+        setUsuarios(data as Perfil[]);
+      }
+      setLoading(false);
+    }
+    fetchUsuarios();
+  }, []);
+
+  const usuariosFiltrados = usuarios.filter(usuario =>
+    usuario.nomeCompleto.toLowerCase().includes(filtro.toLowerCase())
+  );
+
+  const handleInvite = async (email: string) => {
+    const { error } = await supabase.auth.inviteUserByEmail(email);
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success(`Convite enviado para ${email}!`);
+    }
+    handleCloseForm();
+  };
+
+  const handleEditPermissions = (userId: string) => {
+    navigate(`/configuracoes/geral/usuarios/${userId}/permissoes`);
+  };
+
+  const columns = useMemo(() => [
+    { header: 'Nome', accessorKey: 'nomeCompleto', cell: (item: Perfil) => <p className="font-medium text-gray-800">{item.nomeCompleto}</p> },
+    { header: 'CPF', accessorKey: 'cpf' },
+  ], []);
+
+  return (
+    <>
+      <GlassCard className="mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4 flex-1 min-w-[250px]">
+            <GlassInput placeholder="Buscar por nome..." value={filtro} onChange={(e) => setFiltro(e.target.value)} className="w-full max-w-md" />
+            <GlassButton icon={Filter} variant="secondary">Filtros</GlassButton>
+          </div>
+          <div className="flex items-center gap-2">
+            <GlassButton icon={Mail} onClick={handleOpenCreateForm}>Convidar Usuário</GlassButton>
+          </div>
+        </div>
+      </GlassCard>
+
+      <GlassCard>
+        <DataTable
+          data={usuariosFiltrados}
+          columns={columns}
+          loading={loading && usuarios.length === 0}
+          error={error}
+          entityName="Usuário"
+          actions={(item) => (
+            <div className="flex items-center gap-2">
+              <GlassButton icon={KeyRound} variant="secondary" size="sm" onClick={() => handleEditPermissions(item.id)} title="Editar Permissões" />
+            </div>
+          )}
+        />
+      </GlassCard>
+
+      <AnimatePresence>
+        {isFormOpen && (
+          <ConvidarUsuarioModal
+            onInvite={handleInvite}
+            onCancel={handleCloseForm}
+          />
+        )}
+      </AnimatePresence>
+    </>
+  );
+};
+
+export default Usuarios;

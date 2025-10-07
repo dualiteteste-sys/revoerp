@@ -1,0 +1,39 @@
+/*
+          # [DECOUPLE_CLIENTES_VENDEDORES]
+          Remove a correlação entre as tabelas de clientes e vendedores.
+
+          ## Query Description: [Esta operação remove a coluna 'vendedor_id' da tabela 'clientes' e apaga completamente a tabela 'vendedores' e seus tipos de dados associados. Isso é feito para simplificar o sistema e focar no CRUD de Clientes, conforme solicitado.]
+          
+          ## Metadata:
+          - Schema-Category: ["Structural"]
+          - Impact-Level: ["Medium"]
+          - Requires-Backup: [false]
+          - Reversible: [false]
+          
+          ## Structure Details:
+          - Tabela 'clientes': Remove a coluna 'vendedor_id'.
+          - Tabela 'vendedores': Será completamente removida.
+          - Tipos de dados ('tipo_pessoa_vendedor', 'situacao_vendedor', etc.): Serão removidos.
+          
+          ## Security Implications:
+          - RLS Status: [N/A]
+          - Policy Changes: [No]
+          - Auth Requirements: [N/A]
+          
+          ## Performance Impact:
+          - Indexes: [Removed]
+          - Triggers: [N/A]
+          - Estimated Impact: [Baixo. A remoção de uma coluna e tabela não deve impactar a performance geral.]
+          */
+
+-- Remove a coluna de referência da tabela de clientes
+ALTER TABLE public.clientes DROP COLUMN IF EXISTS vendedor_id;
+
+-- Remove a tabela de vendedores e todos os objetos que dependem dela
+DROP TABLE IF EXISTS public.vendedores CASCADE;
+
+-- Remove os tipos de dados (ENUMs) que eram usados apenas pela tabela de vendedores
+DROP TYPE IF EXISTS public.tipo_pessoa_vendedor;
+DROP TYPE IF EXISTS public.situacao_vendedor;
+DROP TYPE IF EXISTS public.regra_comissao;
+DROP TYPE IF EXISTS public.tipo_comissao_vendedor;

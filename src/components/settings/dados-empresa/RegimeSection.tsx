@@ -1,0 +1,98 @@
+import React from 'react';
+import { Control, Controller, UseFormWatch } from 'react-hook-form';
+import { motion, AnimatePresence } from 'framer-motion';
+import { GlassInput } from '../../ui/GlassInput';
+import { InputWrapper } from '../../ui/InputWrapper';
+import { IMaskInput } from 'react-imask';
+import { DadosEmpresaFormData } from '../../../schemas/dadosEmpresaSchema';
+
+const segmentos = ["Comércio", "Indústria", "Serviços", "Agronegócio", "Outro"];
+const regimesTributarios = ["Simples Nacional", "Lucro Presumido", "Lucro Real"];
+
+interface RegimeSectionProps {
+  control: Control<DadosEmpresaFormData>;
+  watch: UseFormWatch<DadosEmpresaFormData>;
+  onCnpjBlur: () => void;
+}
+
+export const RegimeSection: React.FC<RegimeSectionProps> = ({ control, watch, onCnpjBlur }) => {
+  const tipoPessoa = watch('regime.tipoPessoa');
+  const ieIsento = watch('regime.ieIsento');
+
+  return (
+    <section>
+      <h3 className="text-xl font-bold text-gray-800 mb-6 border-b border-white/30 pb-3">Regime/Inscrições</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Controller
+          name="regime.segmento"
+          control={control}
+          render={({ field }) => (
+            <InputWrapper label="Segmento de atuação" helpText="Área que melhor representa sua empresa.">
+              <select className="glass-input" {...field} value={field.value || ''}>
+                <option value="">Selecione</option>
+                {segmentos.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </InputWrapper>
+          )}
+        />
+        <Controller
+          name="regime.tipoPessoa"
+          control={control}
+          render={({ field }) => (
+            <InputWrapper label="Tipo de Pessoa" helpText="Altera os campos obrigatórios do cadastro.">
+              <div className="flex items-center gap-4 p-1 bg-glass-200 rounded-xl">
+                {['PJ', 'PF', 'Estrangeiro'].map(tipo => (
+                  <button key={tipo} type="button" onClick={() => field.onChange(tipo)} className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${field.value === tipo ? 'bg-white shadow-sm' : 'text-gray-600'}`}>{tipo}</button>
+                ))}
+              </div>
+            </InputWrapper>
+          )}
+        />
+      </div>
+      <AnimatePresence mode="wait">
+        <motion.div key={tipoPessoa} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="mt-6">
+          {tipoPessoa === 'PJ' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <Controller name="regime.cnpj" control={control} render={({ field, fieldState: { error } }) => (
+                <InputWrapper label="CNPJ" helpText="Digite para buscar os dados." error={error?.message}>
+                  <IMaskInput mask="00.000.000/0000-00" className="glass-input" {...field} value={String(field.value ?? '')} onBlur={onCnpjBlur} required />
+                </InputWrapper>
+              )} />
+              <Controller name="regime.ie" control={control} render={({ field, fieldState: { error } }) => (
+                <InputWrapper label="Inscrição Estadual" helpText="Marque 'IE Isento' para desabilitar." error={error?.message}>
+                  <div className="flex items-center gap-2">
+                    <GlassInput {...field} value={field.value || ''} disabled={ieIsento} />
+                    <Controller name="regime.ieIsento" control={control} render={({ field: checkboxField }) => (
+                      <label className="flex items-center gap-1 text-sm"><input type="checkbox" className="form-checkbox" checked={checkboxField.value || false} onChange={checkboxField.onChange} /> Isento</label>
+                    )} />
+                  </div>
+                </InputWrapper>
+              )} />
+              <Controller name="regime.im" control={control} render={({ field }) => (
+                <InputWrapper label="Inscrição Municipal" helpText="Obrigatória em alguns municípios."><GlassInput {...field} value={field.value || ''} /></InputWrapper>
+              )} />
+              <Controller name="regime.cnae" control={control} render={({ field }) => (
+                <InputWrapper label="CNAE" helpText="Atividade principal da empresa."><IMaskInput mask="0000-0/00" className="glass-input" {...field} value={String(field.value ?? '')} /></InputWrapper>
+              )} />
+              <Controller name="regime.crt" control={control} render={({ field }) => (
+                <InputWrapper label="Código de regime tributário" className="lg:col-span-2">
+                  <select className="glass-input" {...field} value={field.value || ''}>
+                    <option value="">Selecione</option>
+                    {regimesTributarios.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </InputWrapper>
+              )} />
+            </div>
+          )}
+          {tipoPessoa === 'PF' && (
+            <Controller name="regime.cpf" control={control} render={({ field, fieldState: { error } }) => (
+              <InputWrapper label="CPF" helpText="Validamos os dígitos verificadores." error={error?.message}>
+                <IMaskInput mask="000.000.000-00" className="glass-input" {...field} value={String(field.value ?? '')} required />
+              </InputWrapper>
+            )} />
+          )}
+        </motion.div>
+      </AnimatePresence>
+    </section>
+  );
+};

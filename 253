@@ -1,0 +1,21 @@
+import { supabase } from '../lib/supabaseClient';
+		import { PostgrestError } from '@supabase/supabase-js';
+		import { snakeToCamel } from '../lib/utils';
+		import { Comissao } from '../types';
+
+		export class ComissoesRepository {
+		  protected supabase = supabase;
+		  protected viewName: string = 'comissoes_view';
+
+		  protected handleError(error: PostgrestError | null, context?: string): void {
+		    if (error) {
+		      console.error(`Error in ComissoesRepository${context ? ` (${context})` : ''}:`, error);
+		      throw new Error(error.message);
+		    }
+		  }
+
+		  async findAll(options: { page?: number; pageSize?: number } = {}): Promise<{ data: Comissao[]; count: number }> {
+		    console.warn('[Modo de Construção] Chamada para ComissoesRepository.findAll bloqueada.');
+		    return { data: [], count: 0 };
+		  }
+		}

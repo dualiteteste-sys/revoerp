@@ -1,0 +1,23 @@
+import { BaseRepository } from './BaseRepository';
+		import { Expedicao, ExpedicaoPedido, PedidoVenda, StatusPedidoVenda } from '../types';
+		import { camelToSnake, snakeToCamel } from '../lib/utils';
+
+		export class ExpedicaoRepository extends BaseRepository<Expedicao> {
+		  constructor() {
+		    super('expedicoes');
+		  }
+
+		  protected createEntity(data: any): Expedicao {
+		    return data as Expedicao;
+		  }
+
+		  async findPedidosParaExpedir(formaEnvio: string, incluirSemForma: boolean): Promise<PedidoVenda[]> {
+		    console.warn('[Modo de Construção] Chamada para ExpedicaoRepository.findPedidosParaExpedir bloqueada.');
+		    return [];
+		  }
+
+		  async createExpedicao(expedicaoData: Omit<Expedicao, 'id' | 'createdAt' | 'updatedAt'>, pedidoIds: string[]): Promise<Expedicao> {
+		    console.warn('[Modo de Construção] Chamada para ExpedicaoRepository.createExpedicao bloqueada.');
+		    throw new Error("Funcionalidade desativada durante a reconstrução.");
+		  }
+		}

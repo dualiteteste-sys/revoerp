@@ -1,0 +1,21 @@
+-- Corrige os alertas de segurança "Function Search Path Mutable"
+-- definindo um search_path explícito e seguro para cada função.
+
+ALTER FUNCTION public.handle_new_user()
+SET search_path = public;
+
+ALTER FUNCTION public.check_permission(permission_to_check TEXT)
+SET search_path = public;
+
+ALTER FUNCTION public.get_user_permissions(p_user_id UUID)
+SET search_path = public;
+
+-- Revoga permissões de execução excessivas do public e concede apenas ao authenticated.
+REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.handle_new_user() TO authenticated;
+
+REVOKE EXECUTE ON FUNCTION public.check_permission(permission_to_check TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.check_permission(permission_to_check TEXT) TO authenticated;
+
+REVOKE EXECUTE ON FUNCTION public.get_user_permissions(p_user_id UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_user_permissions(p_user_id UUID) TO authenticated;

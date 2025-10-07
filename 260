@@ -1,0 +1,26 @@
+import { BaseRepository } from './BaseRepository';
+		import { DevolucaoVenda, DevolucaoVendaItem } from '../types';
+		import { camelToSnake, snakeToCamel } from '../lib/utils';
+
+		export class DevolucaoVendaRepository extends BaseRepository<DevolucaoVenda> {
+		  constructor() {
+		    super('devolucoes_venda');
+		  }
+
+		  protected createEntity(data: any): DevolucaoVenda {
+		    return data as DevolucaoVenda;
+		  }
+
+		  async findAll(options: { page?: number; pageSize?: number } = {}): Promise<{ data: DevolucaoVenda[]; count: number }> {
+		    console.warn('[Modo de Construção] Chamada para DevolucaoVendaRepository.findAll bloqueada.');
+		    return { data: [], count: 0 };
+		  }
+
+		  async createWithItems(
+		    devolucaoData: Omit<DevolucaoVenda, 'id' | 'createdAt' | 'updatedAt' | 'itens'>,
+		    itensData: Omit<DevolucaoVendaItem, 'id' | 'createdAt' | 'updatedAt' | 'devolucaoVendaId'>[]
+		  ): Promise<DevolucaoVenda> {
+		    console.warn('[Modo de Construção] Chamada para DevolucaoVendaRepository.createWithItems bloqueada.');
+		    throw new Error("Funcionalidade desativada durante a reconstrução.");
+		  }
+		}

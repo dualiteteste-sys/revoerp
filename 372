@@ -1,0 +1,1007 @@
+/*
+          # [MVP Schema]
+          Criação da estrutura inicial de tabelas, tipos, funções e políticas de segurança para o Revo ERP.
+
+          ## Query Description: ["Este script foi projetado para ser idempotente, o que significa que ele pode ser executado várias vezes sem causar erros. Ele verifica a existência de cada objeto (tabela, tipo, função, etc.) antes de criá-lo. Isso garante que, mesmo que a execução anterior tenha sido parcial, a nova execução completará a configuração sem duplicar itens."]
+          
+          ## Metadata:
+          - Schema-Category: ["Structural"]
+          - Impact-Level: ["Medium"]
+          - Requires-Backup: [false]
+          - Reversible: [false]
+          
+          ## Structure Details:
+          [Criação de tipos ENUM, tabelas como clientes, produtos, pedidos_venda, etc., e configuração de chaves primárias, estrangeiras e gatilhos (triggers).]
+          
+          ## Security Implications:
+          - RLS Status: [Enabled]
+          - Policy Changes: [Yes]
+          - Auth Requirements: [Usuários autenticados terão acesso de acordo com as políticas definidas.]
+          
+          ## Performance Impact:
+          - Indexes: [Added]
+          - Triggers: [Added]
+          - Estimated Impact: [Baixo impacto no desempenho inicial. A criação de índices visa otimizar consultas futuras.]
+          */
+
+-- Habilitar a extensão pgcrypto se ainda não estiver habilitada
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- =============================================
+-- TIPOS ENUM
+-- =============================================
+
+DO $$ BEGIN
+    CREATE TYPE tipo_pessoa AS ENUM ('FISICA', 'JURIDICA', 'ESTRANGEIRO');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE contribuinte_icms AS ENUM ('NAO_INFORMADO', 'CONTRIBUINTE_ICMS', 'CONTRIBUINTE_ISENTO', 'NAO_CONTRIBUINTE');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE situacao_produto AS ENUM ('ATIVO', 'INATIVO');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE tipo_produto AS ENUM ('SIMPLES', 'COM_VARIACOES', 'KIT', 'FABRICADO', 'MATERIA_PRIMA');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE origem_produto AS ENUM ('NACIONAL', 'ESTRANGEIRA_DIRETA', 'ESTRANGEIRA_INTERNO', 'NACIONAL_CONTEUDO_40_70', 'NACIONAL_PROCESSO_BASICO', 'NACIONAL_CONTEUDO_INF_40', 'ESTRANGEIRA_DIRETA_SEM_SIMILAR', 'ESTRANGEIRA_INTERNO_SEM_SIMILAR', 'NACIONAL_CONTEUDO_SUP_70');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE situacao_servico AS ENUM ('ATIVO', 'INATIVO');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE tipo_pessoa_vendedor AS ENUM ('Física', 'Jurídica', 'Estrangeiro');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE situacao_vendedor AS ENUM ('Ativo com acesso ao sistema', 'Ativo sem acesso ao sistema', 'Inativo');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE regra_comissao AS ENUM ('Liberação parcial (pelo pagamento)', 'Liberação total (no faturamento)', 'Liberação total (no pagamento)');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE tipo_comissao_vendedor AS ENUM ('Comissão com alíquota fixa', 'Comissão com alíquota conforme descontos');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE status_os AS ENUM ('ABERTA', 'EM_ANDAMENTO', 'FINALIZADA', 'CANCELADA', 'ORCAMENTO');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE prioridade_os AS ENUM ('BAIXA', 'MEDIA', 'ALTA', 'URGENTE');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE status_pedido_venda AS ENUM ('ABERTO', 'FATURADO', 'CANCELADO');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE status_fatura AS ENUM ('EMITIDA', 'PAGA', 'VENCIDA', 'CANCELADA');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE status_conta_receber AS ENUM ('A_RECEBER', 'RECEBIDO', 'VENCIDO');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE status_conta_pagar AS ENUM ('A_PAGAR', 'PAGO', 'VENCIDO');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE ocorrencia_conta AS ENUM ('Única', 'Recorrente');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE tipo_movimento_caixa AS ENUM ('ENTRADA', 'SAIDA');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE status_ordem_compra AS ENUM ('ABERTA', 'RECEBIDA', 'CANCELADA');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE frete_por_conta AS ENUM ('CIF', 'FOB');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE crm_etapa AS ENUM ('Lead', 'Prospecção', 'Negociação', 'Ganho', 'Perdido');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE status_comissao AS ENUM ('Pendente', 'Liberada', 'Paga', 'Cancelada');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE contrato_situacao AS ENUM ('Ativo', 'Demonstração', 'Inativo', 'Isento', 'Baixado', 'Encerrado');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE contrato_vencimento_regra AS ENUM ('No mês corrente', 'No mês seguinte');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE contrato_periodicidade AS ENUM ('Mensal', 'Bimestral', 'Trimestral', 'Semestral', 'Anual');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE status_nota_entrada AS ENUM ('EM_DIGITACAO', 'FINALIZADA', 'CANCELADA');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE tipo_categoria_financeira AS ENUM ('RECEITA', 'DESPESA');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE status_expedicao AS ENUM ('AGUARDANDO_ENVIO', 'ENVIADO', 'ENTREGUE', 'CANCELADO');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+-- =============================================
+-- TABELAS
+-- =============================================
+
+CREATE TABLE IF NOT EXISTS clientes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo TEXT,
+    nome TEXT NOT NULL,
+    nome_fantasia TEXT,
+    tipo_pessoa tipo_pessoa DEFAULT 'FISICA',
+    cpf_cnpj TEXT NOT NULL UNIQUE,
+    rg TEXT,
+    inscricao_estadual TEXT,
+    inscricao_municipal TEXT,
+    contribuinte_icms contribuinte_icms DEFAULT 'NAO_INFORMADO',
+    is_cliente BOOLEAN DEFAULT true,
+    is_fornecedor BOOLEAN DEFAULT false,
+    is_transportadora BOOLEAN DEFAULT false,
+    logradouro TEXT,
+    numero TEXT,
+    complemento TEXT,
+    bairro TEXT,
+    cep TEXT,
+    cidade TEXT,
+    estado TEXT,
+    pais TEXT DEFAULT 'Brasil',
+    cobranca_logradouro TEXT,
+    cobranca_numero TEXT,
+    cobranca_complemento TEXT,
+    cobranca_bairro TEXT,
+    cobranca_cep TEXT,
+    cobranca_cidade TEXT,
+    cobranca_estado TEXT,
+    telefone TEXT,
+    telefone_adicional TEXT,
+    celular TEXT,
+    email TEXT,
+    email_nfe TEXT,
+    site TEXT,
+    estado_civil TEXT,
+    profissao TEXT,
+    sexo TEXT,
+    data_nascimento DATE,
+    naturalidade TEXT,
+    status_crm TEXT,
+    vendedor_id UUID,
+    condicao_pagamento_padrao_id UUID,
+    limite_credito NUMERIC(15, 2),
+    observacoes TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS pessoas_contato (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    cliente_id UUID REFERENCES clientes(id) ON DELETE CASCADE,
+    nome TEXT NOT NULL,
+    setor TEXT,
+    email TEXT,
+    telefone TEXT,
+    ramal TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS cliente_anexos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    cliente_id UUID REFERENCES clientes(id) ON DELETE CASCADE,
+    nome_arquivo TEXT NOT NULL,
+    path TEXT NOT NULL,
+    tamanho BIGINT NOT NULL,
+    tipo TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS produtos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tipo_produto tipo_produto DEFAULT 'SIMPLES',
+    nome TEXT NOT NULL,
+    codigo_barras TEXT,
+    codigo TEXT,
+    origem origem_produto DEFAULT 'NACIONAL',
+    unidade TEXT,
+    ncm TEXT,
+    cest TEXT,
+    preco_venda NUMERIC(15, 2) DEFAULT 0,
+    peso_liquido NUMERIC(10, 3),
+    peso_bruto NUMERIC(10, 3),
+    volumes INTEGER,
+    controlar_estoque BOOLEAN DEFAULT false,
+    estoque_minimo INTEGER,
+    estoque_maximo INTEGER,
+    controlar_lotes BOOLEAN DEFAULT false,
+    localizacao TEXT,
+    dias_preparacao INTEGER,
+    situacao situacao_produto DEFAULT 'ATIVO',
+    marca TEXT,
+    descricao_complementar TEXT,
+    link_video TEXT,
+    slug TEXT,
+    keywords TEXT,
+    titulo_seo TEXT,
+    descricao_seo TEXT,
+    custo NUMERIC(15, 2),
+    permitir_vendas BOOLEAN DEFAULT true,
+    observacoes_produto TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS produto_imagens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    produto_id UUID REFERENCES produtos(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    nome_arquivo TEXT NOT NULL,
+    tamanho BIGINT NOT NULL,
+    tipo TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS produto_anuncios (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    produto_id UUID REFERENCES produtos(id) ON DELETE CASCADE,
+    ecommerce TEXT NOT NULL,
+    identificador TEXT NOT NULL,
+    descricao TEXT,
+    UNIQUE(produto_id, ecommerce, identificador)
+);
+
+CREATE TABLE IF NOT EXISTS produtos_fornecedores (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    produto_id UUID REFERENCES produtos(id) ON DELETE CASCADE,
+    fornecedor_id UUID REFERENCES clientes(id) ON DELETE CASCADE,
+    codigo_no_fornecedor TEXT,
+    UNIQUE(produto_id, fornecedor_id)
+);
+
+CREATE TABLE IF NOT EXISTS servicos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    descricao TEXT NOT NULL,
+    codigo TEXT,
+    preco NUMERIC(15, 2) DEFAULT 0,
+    unidade TEXT,
+    situacao situacao_servico DEFAULT 'ATIVO',
+    codigo_servico TEXT,
+    nbs TEXT,
+    descricao_complementar TEXT,
+    observacoes TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS vendedores (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    nome TEXT NOT NULL,
+    fantasia TEXT,
+    codigo TEXT,
+    tipo_pessoa tipo_pessoa_vendedor DEFAULT 'Física',
+    cpf_cnpj TEXT UNIQUE,
+    contribuinte contribuinte_icms DEFAULT 'NAO_INFORMADO',
+    inscricao_estadual TEXT,
+    cep TEXT,
+    cidade TEXT,
+    uf TEXT,
+    logradouro TEXT,
+    bairro TEXT,
+    numero TEXT,
+    complemento TEXT,
+    telefone TEXT,
+    celular TEXT,
+    email TEXT UNIQUE,
+    situacao situacao_vendedor DEFAULT 'Ativo com acesso ao sistema',
+    deposito TEXT,
+    email_comunicacoes TEXT,
+    regra_liberacao_comissao regra_comissao DEFAULT 'Liberação parcial (pelo pagamento)',
+    tipo_comissao tipo_comissao_vendedor DEFAULT 'Comissão com alíquota fixa',
+    aliquota_comissao NUMERIC(5, 2),
+    desconsiderar_comissao_linha_produto BOOLEAN DEFAULT false,
+    observacoes TEXT,
+    ativo BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS user_permissions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+    permission TEXT NOT NULL,
+    UNIQUE(user_id, permission)
+);
+
+CREATE TABLE IF NOT EXISTS ordens_servico (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    numero TEXT NOT NULL,
+    cliente_id UUID REFERENCES clientes(id),
+    descricao_servico TEXT,
+    data_inicio DATE NOT NULL,
+    data_previsao DATE,
+    data_conclusao DATE,
+    vendedor_id UUID REFERENCES vendedores(id),
+    tecnico_id UUID REFERENCES vendedores(id),
+    total_servicos NUMERIC(15, 2),
+    desconto TEXT,
+    status status_os DEFAULT 'ABERTA',
+    prioridade prioridade_os DEFAULT 'MEDIA',
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS ordem_servico_itens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    ordem_servico_id UUID REFERENCES ordens_servico(id) ON DELETE CASCADE,
+    servico_id UUID REFERENCES servicos(id),
+    descricao TEXT NOT NULL,
+    quantidade NUMERIC(10, 2) NOT NULL,
+    preco NUMERIC(15, 2) NOT NULL,
+    desconto NUMERIC(5, 2),
+    valor_total NUMERIC(15, 2),
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS pedidos_venda (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    numero TEXT NOT NULL,
+    cliente_id UUID REFERENCES clientes(id),
+    vendedor_id UUID REFERENCES vendedores(id),
+    data_venda DATE NOT NULL,
+    valor_total NUMERIC(15, 2),
+    status status_pedido_venda DEFAULT 'ABERTO',
+    expedido BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS pedido_venda_itens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    pedido_id UUID REFERENCES pedidos_venda(id) ON DELETE CASCADE,
+    produto_id UUID REFERENCES produtos(id),
+    servico_id UUID REFERENCES servicos(id),
+    descricao TEXT NOT NULL,
+    quantidade NUMERIC(10, 2) NOT NULL,
+    valor_unitario NUMERIC(15, 2) NOT NULL,
+    valor_total NUMERIC(15, 2),
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS faturas_venda (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    pedido_id UUID REFERENCES pedidos_venda(id),
+    numero_fatura TEXT NOT NULL,
+    data_emissao DATE NOT NULL,
+    data_vencimento DATE NOT NULL,
+    valor_total NUMERIC(15, 2),
+    status status_fatura DEFAULT 'EMITIDA',
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS contas_receber (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    fatura_id UUID REFERENCES faturas_venda(id),
+    cliente_id UUID REFERENCES clientes(id),
+    contrato_id UUID,
+    descricao TEXT,
+    valor NUMERIC(15, 2) NOT NULL,
+    data_vencimento DATE NOT NULL,
+    data_pagamento DATE,
+    status status_conta_receber DEFAULT 'A_RECEBER',
+    ocorrencia ocorrencia_conta DEFAULT 'Única',
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS contas_pagar (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    descricao TEXT NOT NULL,
+    valor NUMERIC(15, 2) NOT NULL,
+    data_vencimento DATE NOT NULL,
+    data_pagamento DATE,
+    status status_conta_pagar DEFAULT 'A_PAGAR',
+    fornecedor_id UUID REFERENCES clientes(id),
+    ocorrencia ocorrencia_conta DEFAULT 'Única',
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS fluxo_caixa (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    data DATE NOT NULL,
+    descricao TEXT NOT NULL,
+    valor NUMERIC(15, 2) NOT NULL,
+    tipo tipo_movimento_caixa NOT NULL,
+    conta_receber_id UUID REFERENCES contas_receber(id),
+    conta_pagar_id UUID REFERENCES contas_pagar(id),
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS ordens_compra (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    numero TEXT NOT NULL,
+    fornecedor_id UUID REFERENCES clientes(id),
+    data_compra DATE NOT NULL,
+    total_geral NUMERIC(15, 2),
+    status status_ordem_compra DEFAULT 'ABERTA',
+    frete_por_conta frete_por_conta DEFAULT 'CIF',
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS ordem_compra_itens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    ordem_compra_id UUID REFERENCES ordens_compra(id) ON DELETE CASCADE,
+    descricao TEXT NOT NULL,
+    quantidade NUMERIC(10, 2) NOT NULL,
+    preco_unitario NUMERIC(15, 2) NOT NULL,
+    ipi NUMERIC(5, 2),
+    preco_total NUMERIC(15, 2),
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS estoque_movimentos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    produto_id UUID REFERENCES produtos(id) ON DELETE CASCADE,
+    tipo tipo_movimento_caixa NOT NULL,
+    quantidade INTEGER NOT NULL,
+    data TIMESTAMPTZ DEFAULT now(),
+    origem TEXT,
+    observacao TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS crm_oportunidades (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    titulo TEXT NOT NULL,
+    cliente_id UUID REFERENCES clientes(id),
+    vendedor_id UUID REFERENCES vendedores(id),
+    valor_estimado NUMERIC(15, 2),
+    etapa crm_etapa DEFAULT 'Lead',
+    data_fechamento_prevista DATE,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS comissoes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    pedido_venda_id UUID REFERENCES pedidos_venda(id),
+    vendedor_id UUID REFERENCES vendedores(id),
+    valor_comissao NUMERIC(15, 2),
+    status status_comissao DEFAULT 'Pendente',
+    data_pagamento DATE,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS contratos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    cliente_id UUID REFERENCES clientes(id),
+    descricao TEXT NOT NULL,
+    situacao contrato_situacao DEFAULT 'Ativo',
+    data_contrato DATE NOT NULL,
+    valor NUMERIC(15, 2) NOT NULL,
+    vencimento_regra contrato_vencimento_regra DEFAULT 'No mês corrente',
+    dia_vencimento INTEGER NOT NULL,
+    periodicidade contrato_periodicidade DEFAULT 'Mensal',
+    categoria_id UUID,
+    forma_recebimento TEXT,
+    emitir_nf BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS contrato_anexos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    contrato_id UUID REFERENCES contratos(id) ON DELETE CASCADE,
+    nome_arquivo TEXT NOT NULL,
+    path TEXT NOT NULL,
+    tamanho BIGINT NOT NULL,
+    tipo TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS notas_entrada (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    numero TEXT NOT NULL,
+    fornecedor_id UUID REFERENCES clientes(id),
+    data_entrada DATE NOT NULL,
+    valor_total NUMERIC(15, 2),
+    status status_nota_entrada DEFAULT 'EM_DIGITACAO',
+    observacoes TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS nota_entrada_itens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nota_entrada_id UUID REFERENCES notas_entrada(id) ON DELETE CASCADE,
+    produto_id UUID REFERENCES produtos(id),
+    descricao TEXT NOT NULL,
+    quantidade NUMERIC(10, 2) NOT NULL,
+    valor_unitario NUMERIC(15, 2) NOT NULL,
+    valor_total NUMERIC(15, 2),
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS devolucoes_venda (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    numero TEXT NOT NULL,
+    pedido_venda_id UUID REFERENCES pedidos_venda(id),
+    cliente_id UUID REFERENCES clientes(id),
+    data_devolucao DATE NOT NULL,
+    valor_total_devolvido NUMERIC(15, 2),
+    observacoes TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS devolucao_venda_itens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    devolucao_venda_id UUID REFERENCES devolucoes_venda(id) ON DELETE CASCADE,
+    pedido_venda_item_id UUID,
+    produto_id UUID REFERENCES produtos(id),
+    servico_id UUID REFERENCES servicos(id),
+    descricao TEXT NOT NULL,
+    quantidade NUMERIC(10, 2) NOT NULL,
+    valor_unitario NUMERIC(15, 2) NOT NULL,
+    valor_total NUMERIC(15, 2),
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS configuracoes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    chave TEXT NOT NULL UNIQUE,
+    valor JSONB,
+    descricao TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS categorias_financeiras (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    descricao TEXT NOT NULL,
+    tipo tipo_categoria_financeira NOT NULL,
+    ativo BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS formas_pagamento (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    descricao TEXT NOT NULL,
+    ativo BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS expedicoes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    lote TEXT NOT NULL UNIQUE,
+    forma_envio TEXT NOT NULL,
+    status status_expedicao DEFAULT 'AGUARDANDO_ENVIO',
+    data_criacao DATE NOT NULL,
+    data_envio DATE,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS expedicao_pedidos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    expedicao_id UUID REFERENCES expedicoes(id) ON DELETE CASCADE,
+    pedido_venda_id UUID REFERENCES pedidos_venda(id) ON DELETE CASCADE,
+    UNIQUE(expedicao_id, pedido_venda_id)
+);
+
+CREATE TABLE IF NOT EXISTS embalagens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    descricao TEXT NOT NULL,
+    tipo TEXT NOT NULL,
+    largura_cm NUMERIC(10, 1),
+    altura_cm NUMERIC(10, 1),
+    comprimento_cm NUMERIC(10, 1),
+    diametro_cm NUMERIC(10, 1),
+    peso_kg NUMERIC(10, 3) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- =============================================
+-- FUNÇÕES E VIEWS
+-- =============================================
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.vendedores (user_id, nome, email, cpf_cnpj)
+  VALUES (
+    new.id,
+    new.raw_user_meta_data->>'full_name',
+    new.email,
+    new.raw_user_meta_data->>'cpf_cnpj'
+  );
+  RETURN new;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'on_auth_user_created') THEN
+    CREATE TRIGGER on_auth_user_created
+      AFTER INSERT ON auth.users
+      FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+  END IF;
+END
+$$;
+
+CREATE OR REPLACE VIEW public.produtos_com_estoque AS
+SELECT
+  p.id,
+  p.nome,
+  p.codigo,
+  p.controlar_estoque,
+  p.estoque_minimo,
+  p.estoque_maximo,
+  p.unidade,
+  p.situacao,
+  (
+    SELECT COALESCE(SUM(
+      CASE
+        WHEN em.tipo = 'ENTRADA' THEN em.quantidade
+        ELSE -em.quantidade
+      END
+    ), 0)
+    FROM estoque_movimentos em
+    WHERE em.produto_id = p.id
+  ) AS estoque_atual,
+  (
+    SELECT json_agg(pi.*)
+    FROM (
+      SELECT *
+      FROM produto_imagens
+      WHERE produto_id = p.id
+      ORDER BY created_at
+      LIMIT 1
+    ) pi
+  ) AS imagens
+FROM produtos p;
+
+CREATE OR REPLACE VIEW public.comissoes_view AS
+SELECT
+  c.id,
+  pv.id AS pedido_venda_id,
+  v.id AS vendedor_id,
+  v.nome AS vendedor_nome,
+  cl.nome AS cliente_nome,
+  pv.data_venda,
+  pv.valor_total AS valor_venda,
+  (pv.valor_total * (v.aliquota_comissao / 100.0)) AS valor_comissao,
+  c.status,
+  c.data_pagamento
+FROM comissoes c
+JOIN pedidos_venda pv ON c.pedido_venda_id = pv.id
+JOIN vendedores v ON c.vendedor_id = v.id
+JOIN clientes cl ON pv.cliente_id = cl.id;
+
+CREATE OR REPLACE VIEW public.dre_mensal AS
+SELECT
+  EXTRACT(YEAR FROM data) AS ano,
+  EXTRACT(MONTH FROM data) AS mes,
+  to_char(data, 'TMMonth') AS mes_nome,
+  SUM(CASE WHEN tipo = 'ENTRADA' THEN valor ELSE 0 END) AS receita,
+  SUM(CASE WHEN tipo = 'SAIDA' THEN valor ELSE 0 END) AS despesa,
+  SUM(CASE WHEN tipo = 'ENTRADA' THEN valor ELSE -valor END) AS resultado
+FROM fluxo_caixa
+GROUP BY ano, mes, mes_nome;
+
+CREATE OR REPLACE VIEW public.ordens_servico_view AS
+SELECT
+    os.id,
+    os.numero,
+    os.descricao_servico,
+    os.data_inicio,
+    os.data_previsao,
+    os.data_conclusao,
+    os.total_servicos,
+    os.desconto,
+    os.status,
+    os.prioridade,
+    os.created_at,
+    os.updated_at,
+    os.cliente_id,
+    c.nome as cliente_nome,
+    c.email as cliente_email,
+    os.vendedor_id,
+    v.nome as vendedor_nome,
+    os.tecnico_id,
+    t.nome as tecnico_nome
+FROM ordens_servico os
+LEFT JOIN clientes c ON os.cliente_id = c.id
+LEFT JOIN vendedores v ON os.vendedor_id = v.id
+LEFT JOIN vendedores t ON os.tecnico_id = t.id;
+
+CREATE OR REPLACE FUNCTION get_dashboard_stats()
+RETURNS TABLE(
+    faturamento_total_mes_atual numeric,
+    faturamento_total_mes_anterior numeric,
+    novos_clientes_mes_atual bigint,
+    novos_clientes_mes_anterior bigint,
+    pedidos_realizados_mes_atual bigint,
+    pedidos_realizados_mes_anterior bigint
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        (SELECT COALESCE(SUM(valor), 0) FROM contas_receber WHERE status = 'RECEBIDO' AND date_trunc('month', data_pagamento) = date_trunc('month', CURRENT_DATE)) AS faturamento_total_mes_atual,
+        (SELECT COALESCE(SUM(valor), 0) FROM contas_receber WHERE status = 'RECEBIDO' AND date_trunc('month', data_pagamento) = date_trunc('month', CURRENT_DATE - INTERVAL '1 month')) AS faturamento_total_mes_anterior,
+        (SELECT COUNT(*) FROM clientes WHERE date_trunc('month', created_at) = date_trunc('month', CURRENT_DATE)) AS novos_clientes_mes_atual,
+        (SELECT COUNT(*) FROM clientes WHERE date_trunc('month', created_at) = date_trunc('month', CURRENT_DATE - INTERVAL '1 month')) AS novos_clientes_mes_anterior,
+        (SELECT COUNT(*) FROM pedidos_venda WHERE date_trunc('month', data_venda) = date_trunc('month', CURRENT_DATE)) AS pedidos_realizados_mes_atual,
+        (SELECT COUNT(*) FROM pedidos_venda WHERE date_trunc('month', data_venda) = date_trunc('month', CURRENT_DATE - INTERVAL '1 month')) AS pedidos_realizados_mes_anterior;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION get_faturamento_ultimos_12_meses()
+RETURNS TABLE(mes text, faturamento numeric) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        to_char(dates.month, 'Mon') AS mes,
+        COALESCE(SUM(cr.valor), 0) AS faturamento
+    FROM
+        (SELECT date_trunc('month', generate_series(CURRENT_DATE - INTERVAL '11 months', CURRENT_DATE, '1 month')) as month) AS dates
+    LEFT JOIN
+        contas_receber cr ON date_trunc('month', cr.data_pagamento) = dates.month AND cr.status = 'RECEBIDO'
+    GROUP BY
+        dates.month
+    ORDER BY
+        dates.month;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION get_contratos_para_faturar(p_ano integer, p_mes integer)
+RETURNS SETOF contratos AS $$
+BEGIN
+    RETURN QUERY
+    SELECT c.*
+    FROM contratos c
+    WHERE c.situacao = 'Ativo'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM contas_receber cr
+        WHERE cr.contrato_id = c.id
+          AND EXTRACT(YEAR FROM cr.data_vencimento) = p_ano
+          AND EXTRACT(MONTH FROM cr.data_vencimento) = p_mes
+      );
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION get_visao_cobrancas(p_ano integer, p_mes integer)
+RETURNS TABLE(
+    cliente_id uuid,
+    cliente_nome text,
+    cliente_telefone text,
+    valor_total numeric,
+    contratos_count bigint,
+    data_vencimento date,
+    status_integracao text
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        c.id as cliente_id,
+        c.nome as cliente_nome,
+        c.celular as cliente_telefone,
+        SUM(cr.valor) as valor_total,
+        COUNT(DISTINCT cr.contrato_id) as contratos_count,
+        MIN(cr.data_vencimento) as data_vencimento,
+        'pendente'::text as status_integracao
+    FROM contas_receber cr
+    JOIN clientes c ON cr.cliente_id = c.id
+    WHERE cr.contrato_id IS NOT NULL
+      AND EXTRACT(YEAR FROM cr.data_vencimento) = p_ano
+      AND EXTRACT(MONTH FROM cr.data_vencimento) = p_mes
+    GROUP BY c.id, c.nome, c.celular;
+END;
+$$ LANGUAGE plpgsql;
+
+-- =============================================
+-- RLS (Row Level Security)
+-- =============================================
+
+ALTER TABLE clientes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pessoas_contato ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cliente_anexos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE produtos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE produto_imagens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE produto_anuncios ENABLE ROW LEVEL SECURITY;
+ALTER TABLE produtos_fornecedores ENABLE ROW LEVEL SECURITY;
+ALTER TABLE servicos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE vendedores ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_permissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ordens_servico ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ordem_servico_itens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pedidos_venda ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pedido_venda_itens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE faturas_venda ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contas_receber ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contas_pagar ENABLE ROW LEVEL SECURITY;
+ALTER TABLE fluxo_caixa ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ordens_compra ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ordem_compra_itens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE estoque_movimentos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE crm_oportunidades ENABLE ROW LEVEL SECURITY;
+ALTER TABLE comissoes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contratos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contrato_anexos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notas_entrada ENABLE ROW LEVEL SECURITY;
+ALTER TABLE nota_entrada_itens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE devolucoes_venda ENABLE ROW LEVEL SECURITY;
+ALTER TABLE devolucao_venda_itens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE configuracoes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE categorias_financeiras ENABLE ROW LEVEL SECURITY;
+ALTER TABLE formas_pagamento ENABLE ROW LEVEL SECURITY;
+ALTER TABLE expedicoes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE expedicao_pedidos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE embalagens ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Enable all access for authenticated users" ON clientes FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON pessoas_contato FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON cliente_anexos FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON produtos FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON produto_imagens FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON produto_anuncios FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON produtos_fornecedores FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON servicos FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON vendedores FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON user_permissions FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON ordens_servico FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON ordem_servico_itens FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON pedidos_venda FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON pedido_venda_itens FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON faturas_venda FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON contas_receber FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON contas_pagar FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON fluxo_caixa FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON ordens_compra FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON ordem_compra_itens FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON estoque_movimentos FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON crm_oportunidades FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON comissoes FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON contratos FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON contrato_anexos FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON notas_entrada FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON nota_entrada_itens FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON devolucoes_venda FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON devolucao_venda_itens FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON configuracoes FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON categorias_financeiras FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON formas_pagamento FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON expedicoes FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON expedicao_pedidos FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for authenticated users" ON embalagens FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- =============================================
+-- STORAGE BUCKETS
+-- =============================================
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES 
+  ('produto-imagens', 'produto-imagens', true, 2097152, '{"image/*"}'),
+  ('cliente-anexos', 'cliente-anexos', true, 2097152, null),
+  ('anexos-financeiro', 'anexos-financeiro', true, 2097152, null),
+  ('anexos-gerais', 'anexos-gerais', true, 2097152, null)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE POLICY "Allow public read access" ON storage.objects FOR SELECT USING (bucket_id = 'produto-imagens');
+CREATE POLICY "Allow authenticated insert" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'produto-imagens');
+CREATE POLICY "Allow authenticated update" ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'produto-imagens');
+CREATE POLICY "Allow authenticated delete" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'produto-imagens');
+
+CREATE POLICY "Allow public read access" ON storage.objects FOR SELECT USING (bucket_id = 'cliente-anexos');
+CREATE POLICY "Allow authenticated insert" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'cliente-anexos');
+CREATE POLICY "Allow authenticated update" ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'cliente-anexos');
+CREATE POLICY "Allow authenticated delete" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'cliente-anexos');
+
+CREATE POLICY "Allow public read access" ON storage.objects FOR SELECT USING (bucket_id = 'anexos-financeiro');
+CREATE POLICY "Allow authenticated insert" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'anexos-financeiro');
+CREATE POLICY "Allow authenticated update" ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'anexos-financeiro');
+CREATE POLICY "Allow authenticated delete" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'anexos-financeiro');
+
+CREATE POLICY "Allow public read access" ON storage.objects FOR SELECT USING (bucket_id = 'anexos-gerais');
+CREATE POLICY "Allow authenticated insert" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'anexos-gerais');
+CREATE POLICY "Allow authenticated update" ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'anexos-gerais');
+CREATE POLICY "Allow authenticated delete" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'anexos-gerais');

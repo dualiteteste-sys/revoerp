@@ -1,0 +1,33 @@
+import { supabase } from '../lib/supabaseClient';
+		import { PostgrestError } from '@supabase/supabase-js';
+		import { snakeToCamel, camelToSnake } from '../lib/utils';
+		import { ProdutoComEstoque, EstoqueMovimento } from '../types';
+		import { IEstoqueRepository } from './interfaces';
+
+		export class EstoqueRepository implements IEstoqueRepository {
+		  protected supabase = supabase;
+		  protected viewName: string = 'produtos_com_estoque';
+		  protected tableName: string = 'estoque_movimentos';
+
+		  protected handleError(error: PostgrestError | null, context?: string): void {
+		    if (error) {
+		      console.error(`Error in EstoqueRepository${context ? ` (${context})` : ''}:`, error);
+		      throw new Error(error.message);
+		    }
+		  }
+
+		  async findAll(options: { page?: number; pageSize?: number } = {}): Promise<{ data: ProdutoComEstoque[]; count: number }> {
+		    console.warn('[Modo de Construção] Chamada para EstoqueRepository.findAll bloqueada.');
+		    return { data: [], count: 0 };
+		  }
+
+		  async findHistoryByProductId(produtoId: string): Promise<EstoqueMovimento[]> {
+		    console.warn('[Modo de Construção] Chamada para EstoqueRepository.findHistoryByProductId bloqueada.');
+		    return [];
+		  }
+
+		  async createMovimento(movimento: Omit<EstoqueMovimento, 'id' | 'createdAt' | 'updatedAt'>): Promise<EstoqueMovimento> {
+		    console.warn('[Modo de Construção] Chamada para EstoqueRepository.createMovimento bloqueada.');
+		    throw new Error("Funcionalidade desativada durante a reconstrução.");
+		  }
+		}

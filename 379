@@ -1,0 +1,169 @@
+/*
+		          # Criação do Schema de Clientes
+		          Este script cria as tabelas e tipos necessários para o módulo de Clientes e Fornecedores.
+
+		          ## Query Description: Este script é seguro para ser executado. Ele cria novos tipos e tabelas sem afetar dados existentes (já que o banco está vazio).
+		          
+		          ## Metadata:
+		          - Schema-Category: "Structural"
+		          - Impact-Level: "Low"
+		          - Requires-Backup: false
+		          - Reversible: true (com um script de DROP)
+		          
+		          ## Structure Details:
+		          - Tipos: tipo_pessoa, contribuinte_icms, cliente_situacao
+		          - Tabelas: clientes, pessoas_contato, cliente_anexos
+		          
+		          ## Security Implications:
+		          - RLS Status: Enabled
+		          - Policy Changes: Yes (cria políticas de acesso básicas para usuários autenticados)
+		          
+		          ## Performance Impact:
+		          - Indexes: Adiciona índices em chaves primárias e estrangeiras.
+		          - Triggers: Nenhum.
+		          - Estimated Impact: Baixo.
+		          */
+
+		-- 1. CRIAÇÃO DE TIPOS (ENUMS)
+		CREATE TYPE "public"."tipo_pessoa" AS ENUM (
+		    'FISICA',
+		    'JURIDICA',
+		    'ESTRANGEIRO'
+		);
+		CREATE TYPE "public"."contribuinte_icms" AS ENUM (
+		    'Não informado',
+		    'Contribuinte ICMS',
+		    'Contribuinte Isento (sem IE)',
+		    'Não Contribuinte'
+		);
+		CREATE TYPE "public"."cliente_situacao" AS ENUM (
+		    'Ativo',
+		    'Inativo'
+		);
+		-- 2. TABELA DE CLIENTES
+		CREATE TABLE "public"."clientes" (
+		    "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+		    "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+		    "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+		    "codigo" text,
+		    "nome" text NOT NULL,
+		    "nome_fantasia" text,
+		    "tipo_pessoa" tipo_pessoa NOT NULL DEFAULT 'FISICA'::tipo_pessoa,
+		    "cpf_cnpj" text NOT NULL,
+		    "rg" text,
+		    "inscricao_estadual" text,
+		    "inscricao_municipal" text,
+		    "contribuinte_icms" contribuinte_icms NOT NULL DEFAULT 'Não informado'::contribuinte_icms,
+		    "is_cliente" boolean NOT NULL DEFAULT true,
+		    "is_fornecedor" boolean NOT NULL DEFAULT false,
+		    "is_transportadora" boolean NOT NULL DEFAULT false,
+		    "logradouro" text,
+		    "numero" text,
+		    "complemento" text,
+		    "bairro" text,
+		    "cep" text,
+		    "cidade" text,
+		    "estado" text,
+		    "pais" text DEFAULT 'Brasil'::text,
+		    "cobranca_logradouro" text,
+		    "cobranca_numero" text,
+		    "cobranca_complemento" text,
+		    "cobranca_bairro" text,
+		    "cobranca_cep" text,
+		    "cobranca_cidade" text,
+		    "cobranca_estado" text,
+		    "telefone_adicional" text,
+		    "celular" text,
+		    "email" text NOT NULL,
+		    "email_nfe" text,
+		    "site" text,
+		    "estado_civil" text,
+		    "profissao" text,
+		    "sexo" text,
+		    "data_nascimento" date,
+		    "naturalidade" text,
+		    "status_crm" text,
+		    "vendedor_id" uuid,
+		    "condicao_pagamento_padrao_id" text,
+		    "limite_credito" numeric,
+		    "observacoes" text,
+		    "situacao_cliente" cliente_situacao DEFAULT 'Ativo'::cliente_situacao,
+		    "tabela_preco_padrao_id" text,
+		    "prazo_medio_entrega_dias" integer,
+		    "categoria_despesa_padrao_id" text,
+		    "placa_veiculo" text,
+		    "uf_placa" text,
+		    "registro_antt" text,
+		    "observacoes_frete" text
+		);
+		ALTER TABLE "public"."clientes" ENABLE ROW LEVEL SECURITY;
+		CREATE UNIQUE INDEX clientes_pkey ON public.clientes USING btree (id);
+		ALTER TABLE "public"."clientes"
+		ADD CONSTRAINT "clientes_pkey" PRIMARY KEY USING INDEX "clientes_pkey";
+		-- 3. TABELA DE PESSOAS DE CONTATO
+		CREATE TABLE "public"."pessoas_contato" (
+		    "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+		    "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+		    "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+		    "cliente_id" uuid NOT NULL,
+		    "nome" text NOT NULL,
+		    "setor" text,
+		    "email" text,
+		    "telefone" text,
+		    "ramal" text
+		);
+		ALTER TABLE "public"."pessoas_contato" ENABLE ROW LEVEL SECURITY;
+		CREATE UNIQUE INDEX pessoas_contato_pkey ON public.pessoas_contato USING btree (id);
+		ALTER TABLE "public"."pessoas_contato"
+		ADD CONSTRAINT "pessoas_contato_pkey" PRIMARY KEY USING INDEX "pessoas_contato_pkey";
+		ALTER TABLE "public"."pessoas_contato"
+		ADD CONSTRAINT "pessoas_contato_cliente_id_fkey" FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE;
+		-- 4. TABELA DE ANEXOS
+		CREATE TABLE "public"."cliente_anexos" (
+		    "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+		    "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+		    "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+		    "cliente_id" uuid NOT NULL,
+		    "nome_arquivo" text NOT NULL,
+		    "path" text NOT NULL,
+		    "tamanho" integer NOT NULL,
+		    "tipo" text NOT NULL
+		);
+		ALTER TABLE "public"."cliente_anexos" ENABLE ROW LEVEL SECURITY;
+		CREATE UNIQUE INDEX cliente_anexos_pkey ON public.cliente_anexos USING btree (id);
+		ALTER TABLE "public"."cliente_anexos"
+		ADD CONSTRAINT "cliente_anexos_pkey" PRIMARY KEY USING INDEX "cliente_anexos_pkey";
+		ALTER TABLE "public"."cliente_anexos"
+		ADD CONSTRAINT "cliente_anexos_cliente_id_fkey" FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE;
+		-- 5. POLÍTICAS DE ACESSO (RLS)
+		CREATE POLICY "Enable read access for authenticated users" ON "public"."clientes" FOR
+		SELECT USING (auth.role() = 'authenticated');
+		CREATE POLICY "Enable insert for authenticated users" ON "public"."clientes" FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+		CREATE POLICY "Enable update for authenticated users" ON "public"."clientes" FOR
+		UPDATE USING (auth.role() = 'authenticated');
+		CREATE POLICY "Enable delete for authenticated users" ON "public"."clientes" FOR
+		DELETE USING (auth.role() = 'authenticated');
+		CREATE POLICY "Enable read access for authenticated users" ON "public"."pessoas_contato" FOR
+		SELECT USING (auth.role() = 'authenticated');
+		CREATE POLICY "Enable insert for authenticated users" ON "public"."pessoas_contato" FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+		CREATE POLICY "Enable update for authenticated users" ON "public"."pessoas_contato" FOR
+		UPDATE USING (auth.role() = 'authenticated');
+		CREATE POLICY "Enable delete for authenticated users" ON "public"."pessoas_contato" FOR
+		DELETE USING (auth.role() = 'authenticated');
+		CREATE POLICY "Enable read access for authenticated users" ON "public"."cliente_anexos" FOR
+		SELECT USING (auth.role() = 'authenticated');
+		CREATE POLICY "Enable insert for authenticated users" ON "public"."cliente_anexos" FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+		CREATE POLICY "Enable update for authenticated users" ON "public"."cliente_anexos" FOR
+		UPDATE USING (auth.role() = 'authenticated');
+		CREATE POLICY "Enable delete for authenticated users" ON "public"."cliente_anexos" FOR
+		DELETE USING (auth.role() = 'authenticated');
+		-- 6. STORAGE BUCKET PARA ANEXOS
+		INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+		VALUES ('cliente-anexos', 'cliente-anexos', false, 2097152, ARRAY['image/jpeg', 'image/png', 'application/pdf']) ON CONFLICT (id) DO NOTHING;
+		CREATE POLICY "Allow authenticated select on cliente-anexos" ON storage.objects FOR
+		SELECT TO authenticated USING (bucket_id = 'cliente-anexos');
+		CREATE POLICY "Allow authenticated insert on cliente-anexos" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'cliente-anexos');
+		CREATE POLICY "Allow authenticated update on cliente-anexos" ON storage.objects FOR
+		UPDATE TO authenticated USING (bucket_id = 'cliente-anexos');
+		CREATE POLICY "Allow authenticated delete on cliente-anexos" ON storage.objects FOR
+		DELETE TO authenticated USING (bucket_id = 'cliente-anexos');

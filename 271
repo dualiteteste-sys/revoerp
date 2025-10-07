@@ -1,0 +1,31 @@
+import { BaseRepository } from './BaseRepository';
+		import { PedidoVenda, PedidoVendaItem, PedidoVendaAnexo } from '../types';
+		import { camelToSnake, snakeToCamel } from '../lib/utils';
+
+		export class PedidoVendaRepository extends BaseRepository<PedidoVenda> {
+		  constructor() {
+		    super('pedidos_venda');
+		  }
+
+		  protected createEntity(data: any): PedidoVenda {
+		    return data as PedidoVenda;
+		  }
+
+		  async findAll(options: { page?: number; pageSize?: number } = {}): Promise<{ data: PedidoVenda[]; count: number }> {
+		    console.warn('[Modo de Construção] Chamada para PedidoVendaRepository.findAll bloqueada.');
+		    return { data: [], count: 0 };
+		  }
+
+		  async createWithItems(
+		    pedidoData: Partial<Omit<PedidoVenda, 'id' | 'createdAt' | 'updatedAt'>>,
+		    itensData: Omit<PedidoVendaItem, 'id' | 'createdAt' | 'updatedAt' | 'pedidoId'>[]
+		  ): Promise<PedidoVenda> {
+		    console.warn('[Modo de Construção] Chamada para PedidoVendaRepository.createWithItems bloqueada.');
+		    throw new Error("Funcionalidade desativada durante a reconstrução.");
+		  }
+
+		  async findById(id: string): Promise<PedidoVenda | null> {
+		    console.warn('[Modo de Construção] Chamada para PedidoVendaRepository.findById bloqueada.');
+		    return null;
+		  }
+		}

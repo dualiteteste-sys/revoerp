@@ -1,0 +1,18 @@
+import { BaseRepository } from './BaseRepository';
+		import { CrmOportunidade } from '../types';
+		import { snakeToCamel } from '../lib/utils';
+
+		export class CrmRepository extends BaseRepository<CrmOportunidade> {
+		  constructor() {
+		    super('crm_oportunidades');
+		  }
+
+		  protected createEntity(data: any): CrmOportunidade {
+		    return data as CrmOportunidade;
+		  }
+
+		  async findAll(): Promise<CrmOportunidade[]> {
+		    console.warn('[Modo de Construção] Chamada para CrmRepository.findAll bloqueada.');
+		    return [];
+		  }
+		}

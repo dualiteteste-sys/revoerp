@@ -1,0 +1,714 @@
+/*
+# MVP - Schema Inicial do Banco de Dados
+Este script cria a estrutura de tabelas, tipos, funções e políticas de segurança
+essenciais para o funcionamento básico da aplicação Revo ERP.
+*/
+
+-- =============================================
+-- SECTION 1: ENUMERATIONS (Custom Types)
+-- =============================================
+
+/*
+# [Create Enumerations]
+Creates custom data types (enums) to enforce consistency for status fields, types, and other categorical data across the database. This improves data integrity and makes queries more readable.
+
+## Query Description: "This operation defines custom data types. It is a foundational step and is safe to run on a new database. It does not affect existing data."
+## Metadata:
+- Schema-Category: ["Structural"]
+- Impact-Level: ["Low"]
+- Requires-Backup: [false]
+- Reversible: [false]
+*/
+create type public.tipo_pessoa as enum ('FISICA', 'JURIDICA', 'ESTRANGEIRO');
+create type public.contribuinte_icms as enum ('Não informado', 'Contribuinte ICMS', 'Contribuinte Isento (sem IE)', 'Não Contribuinte');
+create type public.status_os as enum ('ABERTA', 'EM_ANDAMENTO', 'FINALIZADA', 'CANCELADA', 'ORCAMENTO');
+create type public.prioridade_os as enum ('BAIXA', 'MEDIA', 'ALTA', 'URGENTE');
+create type public.status_pedido_venda as enum ('ABERTO', 'FATURADO', 'CANCELADO');
+create type public.status_fatura as enum ('EMITIDA', 'PAGA', 'VENCIDA', 'CANCELADA');
+create type public.status_conta_receber as enum ('A_RECEBER', 'RECEBIDO', 'VENCIDO');
+create type public.status_conta_pagar as enum ('A_PAGAR', 'PAGO', 'VENCIDO');
+create type public.tipo_movimento_caixa as enum ('ENTRADA', 'SAIDA');
+create type public.tipo_categoria_financeira as enum ('RECEITA', 'DESPESA');
+create type public.contrato_situacao as enum ('Ativo', 'Demonstração', 'Inativo', 'Isento', 'Baixado', 'Encerrado');
+create type public.crm_etapa as enum ('Lead', 'Prospecção', 'Negociação', 'Ganho', 'Perdido');
+create type public.status_nota_entrada as enum ('EM_DIGITACAO', 'FINALIZADA', 'CANCELADA');
+
+-- =============================================
+-- SECTION 2: CORE TABLES
+-- =============================================
+
+/*
+# [Create Vendedores Table]
+This table stores user profiles, linking directly to Supabase's authentication system. It holds information about salespeople and system users.
+
+## Query Description: "This operation creates the 'vendedores' table for user profiles. It is safe to run on a new database. An automation (trigger) will be added to populate this table when new users sign up."
+## Metadata:
+- Schema-Category: ["Structural"]
+- Impact-Level: ["Low"]
+- Requires-Backup: [false]
+- Reversible: [true]
+*/
+create table public.vendedores (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade unique,
+  nome text not null,
+  email text not null unique,
+  cpf_cnpj text,
+  ativo boolean default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+comment on table public.vendedores is 'Stores user profiles, linked to auth.users.';
+
+/*
+# [Create Clientes Table]
+This table stores information about customers, suppliers, and carriers. It's a central table for many other parts of the system.
+
+## Query Description: "This operation creates the 'clientes' table. It is safe to run on a new database. It holds contact and fiscal information for business partners."
+## Metadata:
+- Schema-Category: ["Structural"]
+- Impact-Level: ["Medium"]
+- Requires-Backup: [false]
+- Reversible: [true]
+*/
+create table public.clientes (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null,
+  nome_fantasia text,
+  tipo_pessoa public.tipo_pessoa not null default 'FISICA',
+  cpf_cnpj text unique,
+  email text,
+  celular text,
+  telefone text,
+  cep text,
+  logradouro text,
+  numero text,
+  bairro text,
+  cidade text,
+  estado text,
+  is_cliente boolean default true,
+  is_fornecedor boolean default false,
+  is_transportadora boolean default false,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+comment on table public.clientes is 'Stores customers, suppliers, and carriers.';
+
+/*
+# [Create Produtos Table]
+Stores the company's product catalog, including pricing, codes, and stock information.
+
+## Query Description: "This operation creates the 'produtos' table. It is safe to run on a new database. It is essential for sales and inventory management."
+## Metadata:
+- Schema-Category: ["Structural"]
+- Impact-Level: ["Medium"]
+- Requires-Backup: [false]
+- Reversible: [true]
+*/
+create table public.produtos (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null,
+  codigo text unique,
+  codigo_barras text unique,
+  unidade text,
+  preco_venda numeric(10, 2) not null default 0,
+  custo numeric(10, 2) default 0,
+  controlar_estoque boolean default false,
+  estoque_minimo numeric(10, 3) default 0,
+  estoque_maximo numeric(10, 3) default 0,
+  situacao text default 'Ativo',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+comment on table public.produtos is 'Product catalog.';
+
+/*
+# [Create Servicos Table]
+Stores the company's service catalog.
+
+## Query Description: "This operation creates the 'servicos' table. It is safe to run on a new database. It is used in service orders and sales."
+## Metadata:
+- Schema-Category: ["Structural"]
+- Impact-Level: ["Low"]
+- Requires-Backup: [false]
+- Reversible: [true]
+*/
+create table public.servicos (
+  id uuid primary key default gen_random_uuid(),
+  descricao text not null,
+  preco numeric(10, 2) not null default 0,
+  situacao text default 'Ativo',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+comment on table public.servicos is 'Service catalog.';
+
+-- =============================================
+-- SECTION 3: TRANSACTIONAL TABLES
+-- =============================================
+
+/*
+# [Create Pedidos de Venda Tables]
+Creates tables for sales orders and their items, forming the core of the sales process.
+
+## Query Description: "This operation creates 'pedidos_venda' and 'pedido_venda_itens'. It is safe for new databases and essential for sales functionality."
+## Metadata:
+- Schema-Category: ["Structural"]
+- Impact-Level: ["High"]
+- Requires-Backup: [false]
+- Reversible: [true]
+*/
+create table public.pedidos_venda (
+  id uuid primary key default gen_random_uuid(),
+  numero text not null unique,
+  cliente_id uuid not null references public.clientes(id),
+  vendedor_id uuid references public.vendedores(id),
+  data_venda date not null default now(),
+  valor_total numeric(10, 2) not null default 0,
+  status public.status_pedido_venda not null default 'ABERTO',
+  expedido boolean default false,
+  forma_envio text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+comment on table public.pedidos_venda is 'Sales orders.';
+
+create table public.pedido_venda_itens (
+  id uuid primary key default gen_random_uuid(),
+  pedido_id uuid not null references public.pedidos_venda(id) on delete cascade,
+  produto_id uuid references public.produtos(id),
+  servico_id uuid references public.servicos(id),
+  descricao text not null,
+  quantidade numeric(10, 3) not null,
+  valor_unitario numeric(10, 2) not null,
+  valor_total numeric(10, 2) not null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  constraint chk_item_source check (produto_id is not null or servico_id is not null)
+);
+comment on table public.pedido_venda_itens is 'Items within a sales order.';
+
+/*
+# [Create Faturas e Contas a Receber Tables]
+Creates tables for managing invoices and accounts receivable, critical for financial tracking.
+
+## Query Description: "This operation creates 'faturas_venda' and 'contas_receber'. Safe for new databases. Essential for billing and financial control."
+## Metadata:
+- Schema-Category: ["Structural"]
+- Impact-Level: ["High"]
+- Requires-Backup: [false]
+- Reversible: [true]
+*/
+create table public.faturas_venda (
+  id uuid primary key default gen_random_uuid(),
+  pedido_id uuid not null references public.pedidos_venda(id),
+  numero_fatura text not null unique,
+  data_emissao date not null default now(),
+  data_vencimento date not null,
+  valor_total numeric(10, 2) not null,
+  status public.status_fatura not null default 'EMITIDA',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+comment on table public.faturas_venda is 'Sales invoices.';
+
+create table public.contas_receber (
+  id uuid primary key default gen_random_uuid(),
+  cliente_id uuid not null references public.clientes(id),
+  fatura_id uuid references public.faturas_venda(id),
+  contrato_id uuid, -- Will be linked later
+  descricao text not null,
+  valor numeric(10, 2) not null,
+  data_vencimento date not null,
+  data_pagamento date,
+  status public.status_conta_receber not null default 'A_RECEBER',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+comment on table public.contas_receber is 'Accounts receivable.';
+
+/*
+# [Create Contas a Pagar Table]
+Creates the table for managing accounts payable.
+
+## Query Description: "This operation creates 'contas_pagar'. Safe for new databases. Essential for expense tracking."
+## Metadata:
+- Schema-Category: ["Structural"]
+- Impact-Level: ["Medium"]
+- Requires-Backup: [false]
+- Reversible: [true]
+*/
+create table public.contas_pagar (
+  id uuid primary key default gen_random_uuid(),
+  fornecedor_id uuid references public.clientes(id),
+  descricao text not null,
+  valor numeric(10, 2) not null,
+  data_vencimento date not null,
+  data_pagamento date,
+  status public.status_conta_pagar not null default 'A_PAGAR',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+comment on table public.contas_pagar is 'Accounts payable.';
+
+/*
+# [Create Fluxo de Caixa Table]
+Creates the table for tracking all cash movements.
+
+## Query Description: "This operation creates 'fluxo_caixa'. Safe for new databases. This table is populated automatically when payments are made or received."
+## Metadata:
+- Schema-Category: ["Structural"]
+- Impact-Level: ["Medium"]
+- Requires-Backup: [false]
+- Reversible: [true]
+*/
+create table public.fluxo_caixa (
+  id uuid primary key default gen_random_uuid(),
+  data timestamptz not null default now(),
+  descricao text not null,
+  valor numeric(10, 2) not null,
+  tipo public.tipo_movimento_caixa not null,
+  conta_receber_id uuid references public.contas_receber(id),
+  conta_pagar_id uuid references public.contas_pagar(id),
+  created_at timestamptz default now()
+);
+comment on table public.fluxo_caixa is 'Cash flow movements.';
+
+/*
+# [Create Contratos Table]
+Creates the table for managing recurring service contracts.
+
+## Query Description: "This operation creates the 'contratos' table. Safe for new databases. Essential for recurring revenue management."
+## Metadata:
+- Schema-Category: ["Structural"]
+- Impact-Level: ["Medium"]
+- Requires-Backup: [false]
+- Reversible: [true]
+*/
+create table public.contratos (
+  id uuid primary key default gen_random_uuid(),
+  cliente_id uuid not null references public.clientes(id),
+  descricao text not null,
+  valor numeric(10, 2) not null,
+  dia_vencimento int not null check (dia_vencimento between 1 and 31),
+  situacao public.contrato_situacao not null default 'Ativo',
+  data_contrato date not null default now(),
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+comment on table public.contratos is 'Recurring service contracts.';
+
+alter table public.contas_receber add constraint fk_contrato foreign key (contrato_id) references public.contratos(id);
+
+/*
+# [Create Ordens de Serviço Tables]
+Creates tables for service orders and their items.
+
+## Query Description: "This operation creates 'ordens_servico' and 'ordem_servico_itens'. Safe for new databases. Core for the services module."
+## Metadata:
+- Schema-Category: ["Structural"]
+- Impact-Level: ["High"]
+- Requires-Backup: [false]
+- Reversible: [true]
+*/
+create table public.ordens_servico (
+  id uuid primary key default gen_random_uuid(),
+  numero text not null unique,
+  cliente_id uuid not null references public.clientes(id),
+  vendedor_id uuid references public.vendedores(id),
+  tecnico_id uuid references public.vendedores(id),
+  descricao_servico text,
+  data_inicio date not null default now(),
+  data_previsao date,
+  status public.status_os not null default 'ABERTA',
+  prioridade public.prioridade_os not null default 'MEDIA',
+  valor_total numeric(10, 2) default 0,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+comment on table public.ordens_servico is 'Service orders.';
+
+create table public.ordem_servico_itens (
+  id uuid primary key default gen_random_uuid(),
+  ordem_servico_id uuid not null references public.ordens_servico(id) on delete cascade,
+  servico_id uuid references public.servicos(id),
+  descricao text not null,
+  quantidade numeric(10, 3) not null,
+  preco numeric(10, 2) not null,
+  valor_total numeric(10, 2) not null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+comment on table public.ordem_servico_itens is 'Items within a service order.';
+
+/*
+# [Create CRM Oportunidades Table]
+Creates the table for managing CRM sales opportunities.
+
+## Query Description: "This operation creates 'crm_oportunidades'. Safe for new databases. Central to the CRM module."
+## Metadata:
+- Schema-Category: ["Structural"]
+- Impact-Level: ["Medium"]
+- Requires-Backup: [false]
+- Reversible: [true]
+*/
+create table public.crm_oportunidades (
+    id uuid primary key default gen_random_uuid(),
+    titulo text not null,
+    cliente_id uuid not null references public.clientes(id),
+    vendedor_id uuid references public.vendedores(id),
+    valor_estimado numeric(10, 2),
+    etapa public.crm_etapa not null default 'Lead',
+    data_fechamento_prevista date,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
+);
+comment on table public.crm_oportunidades is 'CRM sales opportunities.';
+
+/*
+# [Create Estoque Movimentos Table]
+Creates the table for tracking inventory movements.
+
+## Query Description: "This operation creates 'estoque_movimentos'. Safe for new databases. This table is populated automatically by other operations."
+## Metadata:
+- Schema-Category: ["Structural"]
+- Impact-Level: ["High"]
+- Requires-Backup: [false]
+- Reversible: [true]
+*/
+create table public.estoque_movimentos (
+    id uuid primary key default gen_random_uuid(),
+    produto_id uuid not null references public.produtos(id),
+    tipo text not null, -- 'ENTRADA' or 'SAIDA'
+    quantidade numeric(10, 3) not null,
+    data timestamptz not null default now(),
+    origem text,
+    created_at timestamptz default now()
+);
+comment on table public.estoque_movimentos is 'Inventory movement records.';
+
+/*
+# [Create Settings Tables]
+Creates tables for general system configuration.
+
+## Query Description: "This operation creates tables for settings. Safe for new databases. Used to configure system behavior."
+## Metadata:
+- Schema-Category: ["Structural"]
+- Impact-Level: ["Low"]
+- Requires-Backup: [false]
+- Reversible: [true]
+*/
+create table public.configuracoes (
+  id uuid primary key default gen_random_uuid(),
+  chave text not null unique,
+  valor jsonb,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+comment on table public.configuracoes is 'Key-value store for system settings.';
+
+create table public.categorias_financeiras (
+  id uuid primary key default gen_random_uuid(),
+  descricao text not null unique,
+  tipo public.tipo_categoria_financeira not null,
+  ativo boolean default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+comment on table public.categorias_financeiras is 'Financial categories for revenue and expenses.';
+
+create table public.formas_pagamento (
+  id uuid primary key default gen_random_uuid(),
+  descricao text not null unique,
+  ativo boolean default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+comment on table public.formas_pagamento is 'Available payment methods.';
+
+-- =============================================
+-- SECTION 4: AUTHENTICATION & PERMISSIONS
+-- =============================================
+
+/*
+# [Create Vendedor Profile Trigger]
+This trigger automatically creates a new 'vendedor' profile when a new user signs up and confirms their email in Supabase Auth.
+
+## Query Description: "This operation creates a trigger function. It is safe to run. It ensures that every authenticated user has a corresponding profile in the 'vendedores' table, which is crucial for linking user actions throughout the application."
+## Metadata:
+- Schema-Category: ["Structural", "Auth"]
+- Impact-Level: ["Medium"]
+- Requires-Backup: [false]
+- Reversible: [true]
+*/
+create or replace function public.handle_new_user()
+returns trigger as $$
+begin
+  insert into public.vendedores (user_id, nome, email, cpf_cnpj)
+  values (new.id, new.raw_user_meta_data->>'full_name', new.email, new.raw_user_meta_data->>'cpf_cnpj');
+  return new;
+end;
+$$ language plpgsql security definer;
+
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
+
+/*
+# [Create User Permissions Table]
+This table links users to their specific permissions, enabling role-based access control.
+
+## Query Description: "This operation creates the 'user_permissions' table. It is safe to run. This table is fundamental for application security, defining what each user can see and do."
+## Metadata:
+- Schema-Category: ["Structural", "Auth"]
+- Impact-Level: ["High"]
+- Requires-Backup: [false]
+- Reversible: [true]
+*/
+create table public.user_permissions (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null references auth.users(id) on delete cascade,
+    permission text not null,
+    unique(user_id, permission)
+);
+comment on table public.user_permissions is 'Assigns permissions to users.';
+
+-- =============================================
+-- SECTION 5: VIEWS & FUNCTIONS
+-- =============================================
+
+/*
+# [Create Views]
+Creates database views to simplify complex queries and provide pre-aggregated data for the frontend, improving performance and reducing code complexity.
+
+## Query Description: "This operation creates several database views. It is safe to run and does not modify data. These views are read-only and are used for reporting and data presentation in the application."
+## Metadata:
+- Schema-Category: ["Structural"]
+- Impact-Level: ["Low"]
+- Requires-Backup: [false]
+- Reversible: [true]
+*/
+create or replace view public.produtos_com_estoque as
+select
+    p.*,
+    coalesce((select sum(case when m.tipo = 'ENTRADA' then m.quantidade else -m.quantidade end) from public.estoque_movimentos m where m.produto_id = p.id), 0) as estoque_atual
+from
+    public.produtos p;
+
+create or replace view public.ordens_servico_view as
+select
+    os.*,
+    c.nome as cliente_nome,
+    c.email as cliente_email,
+    v.nome as vendedor_nome,
+    t.nome as tecnico_nome
+from
+    public.ordens_servico os
+left join
+    public.clientes c on os.cliente_id = c.id
+left join
+    public.vendedores v on os.vendedor_id = v.id
+left join
+    public.vendedores t on os.tecnico_id = t.id;
+
+create or replace view public.comissoes_view as
+select
+    gen_random_uuid() as id,
+    pvi.id as pedido_venda_item_id,
+    pv.vendedor_id,
+    v.nome as vendedor_nome,
+    pv.cliente_id,
+    c.nome as cliente_nome,
+    pv.data_venda,
+    pvi.valor_total as valor_venda,
+    pvi.valor_total * 0.05 as valor_comissao, -- Exemplo: comissão fixa de 5%
+    cr.status,
+    cr.data_pagamento
+from
+    public.pedido_venda_itens pvi
+join
+    public.pedidos_venda pv on pvi.pedido_id = pv.id
+join
+    public.vendedores v on pv.vendedor_id = v.id
+join
+    public.clientes c on pv.cliente_id = c.id
+left join
+    public.faturas_venda fv on fv.pedido_id = pv.id
+left join
+    public.contas_receber cr on cr.fatura_id = fv.id;
+
+create or replace view public.dre_mensal as
+select
+    date_part('year', data) as ano,
+    date_part('month', data) as mes,
+    to_char(data, 'TMMonth') as mes_nome,
+    sum(case when tipo = 'ENTRADA' then valor else 0 end) as receita,
+    sum(case when tipo = 'SAIDA' then valor else 0 end) as despesa,
+    sum(case when tipo = 'ENTRADA' then valor else -valor end) as resultado
+from
+    public.fluxo_caixa
+group by
+    1, 2, 3
+order by
+    1, 2;
+
+/*
+# [Create RPC Functions]
+Creates stored procedures (RPC functions) to encapsulate complex business logic on the database side. This improves performance and security by reducing the amount of data transferred to the client.
+
+## Query Description: "This operation creates server-side functions. It is safe to run. These functions are called by the application to perform specific, pre-defined queries and calculations."
+## Metadata:
+- Schema-Category: ["Structural"]
+- Impact-Level: ["Medium"]
+- Requires-Backup: [false]
+- Reversible: [true]
+*/
+create or replace function public.get_dashboard_stats()
+returns table (
+    faturamento_total_mes_atual numeric,
+    faturamento_total_mes_anterior numeric,
+    novos_clientes_mes_atual bigint,
+    novos_clientes_mes_anterior bigint,
+    pedidos_realizados_mes_atual bigint,
+    pedidos_realizados_mes_anterior bigint
+) as $$
+begin
+    return query
+    select
+        (select coalesce(sum(valor), 0) from public.contas_receber where status = 'RECEBIDO' and date_trunc('month', data_pagamento) = date_trunc('month', now())) as faturamento_total_mes_atual,
+        (select coalesce(sum(valor), 0) from public.contas_receber where status = 'RECEBIDO' and date_trunc('month', data_pagamento) = date_trunc('month', now() - interval '1 month')) as faturamento_total_mes_anterior,
+        (select count(*) from public.clientes where date_trunc('month', created_at) = date_trunc('month', now())) as novos_clientes_mes_atual,
+        (select count(*) from public.clientes where date_trunc('month', created_at) = date_trunc('month', now() - interval '1 month')) as novos_clientes_mes_anterior,
+        (select count(*) from public.pedidos_venda where date_trunc('month', data_venda) = date_trunc('month', now())) as pedidos_realizados_mes_atual,
+        (select count(*) from public.pedidos_venda where date_trunc('month', data_venda) = date_trunc('month', now() - interval '1 month')) as pedidos_realizados_mes_anterior;
+end;
+$$ language plpgsql;
+
+create or replace function public.get_faturamento_ultimos_12_meses()
+returns table (
+    mes text,
+    faturamento numeric
+) as $$
+begin
+    return query
+    select
+        to_char(d.month, 'YYYY-MM') as mes,
+        coalesce(sum(cr.valor), 0) as faturamento
+    from
+        generate_series(date_trunc('month', now()) - interval '11 months', date_trunc('month', now()), '1 month') as d(month)
+    left join
+        public.contas_receber cr on date_trunc('month', cr.data_pagamento) = d.month and cr.status = 'RECEBIDO'
+    group by
+        d.month
+    order by
+        d.month;
+end;
+$$ language plpgsql;
+
+create or replace function public.get_visao_cobrancas(p_ano int, p_mes int)
+returns table (
+    cliente_id uuid,
+    cliente_nome text,
+    cliente_telefone text,
+    valor_total numeric,
+    contratos_count bigint,
+    data_vencimento date,
+    status_integracao text
+) as $$
+begin
+    return query
+    select
+        c.id as cliente_id,
+        c.nome as cliente_nome,
+        c.celular as cliente_telefone,
+        sum(co.valor) as valor_total,
+        count(co.id) as contratos_count,
+        (make_date(p_ano, p_mes, min(co.dia_vencimento)))::date as data_vencimento,
+        'pendente'::text as status_integracao
+    from
+        public.contratos co
+    join
+        public.clientes c on co.cliente_id = c.id
+    where
+        co.situacao = 'Ativo'
+    group by
+        c.id, c.nome, c.celular;
+end;
+$$ language plpgsql;
+
+create or replace function public.get_contratos_para_faturar(p_ano int, p_mes int)
+returns setof public.contratos as $$
+begin
+    return query
+    select *
+    from public.contratos c
+    where c.situacao = 'Ativo'
+    and not exists (
+        select 1
+        from public.contas_receber cr
+        where cr.contrato_id = c.id
+        and date_part('year', cr.data_vencimento) = p_ano
+        and date_part('month', cr.data_vencimento) = p_mes
+    );
+end;
+$$ language plpgsql;
+
+-- =============================================
+-- SECTION 6: ROW LEVEL SECURITY (RLS)
+-- =============================================
+
+/*
+# [Enable RLS and Define Policies]
+Enables Row Level Security on all application tables and creates default policies. This is a critical security measure to ensure users can only access data they are authorized to see.
+
+## Query Description: "This operation activates RLS and sets up initial access policies. It is a high-impact security change. The default policy allows any authenticated user to perform actions on the data. More granular policies can be added later."
+## Metadata:
+- Schema-Category: ["Dangerous", "Security"]
+- Impact-Level: ["High"]
+- Requires-Backup: [true]
+- Reversible: [true]
+*/
+alter table public.vendedores enable row level security;
+alter table public.clientes enable row level security;
+alter table public.produtos enable row level security;
+alter table public.servicos enable row level security;
+alter table public.pedidos_venda enable row level security;
+alter table public.pedido_venda_itens enable row level security;
+alter table public.faturas_venda enable row level security;
+alter table public.contas_receber enable row level security;
+alter table public.contas_pagar enable row level security;
+alter table public.fluxo_caixa enable row level security;
+alter table public.contratos enable row level security;
+alter table public.ordens_servico enable row level security;
+alter table public.ordem_servico_itens enable row level security;
+alter table public.crm_oportunidades enable row level security;
+alter table public.estoque_movimentos enable row level security;
+alter table public.configuracoes enable row level security;
+alter table public.categorias_financeiras enable row level security;
+alter table public.formas_pagamento enable row level security;
+alter table public.user_permissions enable row level security;
+
+-- Default policies: allow full access for authenticated users.
+-- This is a starting point. More specific, tenant-based, or role-based policies should be added as needed.
+create policy "Allow all for authenticated users" on public.vendedores for all to authenticated using (true) with check (true);
+create policy "Allow all for authenticated users" on public.clientes for all to authenticated using (true) with check (true);
+create policy "Allow all for authenticated users" on public.produtos for all to authenticated using (true) with check (true);
+create policy "Allow all for authenticated users" on public.servicos for all to authenticated using (true) with check (true);
+create policy "Allow all for authenticated users" on public.pedidos_venda for all to authenticated using (true) with check (true);
+create policy "Allow all for authenticated users" on public.pedido_venda_itens for all to authenticated using (true) with check (true);
+create policy "Allow all for authenticated users" on public.faturas_venda for all to authenticated using (true) with check (true);
+create policy "Allow all for authenticated users" on public.contas_receber for all to authenticated using (true) with check (true);
+create policy "Allow all for authenticated users" on public.contas_pagar for all to authenticated using (true) with check (true);
+create policy "Allow all for authenticated users" on public.fluxo_caixa for all to authenticated using (true) with check (true);
+create policy "Allow all for authenticated users" on public.contratos for all to authenticated using (true) with check (true);
+create policy "Allow all for authenticated users" on public.ordens_servico for all to authenticated using (true) with check (true);
+create policy "Allow all for authenticated users" on public.ordem_servico_itens for all to authenticated using (true) with check (true);
+create policy "Allow all for authenticated users" on public.crm_oportunidades for all to authenticated using (true) with check (true);
+create policy "Allow all for authenticated users" on public.estoque_movimentos for all to authenticated using (true) with check (true);
+create policy "Allow all for authenticated users" on public.configuracoes for all to authenticated using (true) with check (true);
+create policy "Allow all for authenticated users" on public.categorias_financeiras for all to authenticated using (true) with check (true);
+create policy "Allow all for authenticated users" on public.formas_pagamento for all to authenticated using (true) with check (true);
+create policy "Allow all for authenticated users" on public.user_permissions for all to authenticated using (true) with check (true);
+
+-- Allow users to see their own profile in 'vendedores'
+create policy "Allow users to see their own profile" on public.vendedores for select to authenticated using (auth.uid() = user_id);

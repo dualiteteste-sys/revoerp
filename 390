@@ -1,0 +1,32 @@
+-- Remove a política antiga se ela existir, para evitar conflitos.
+DROP POLICY IF EXISTS "Permitir acesso de leitura anonimo para clientes" ON public.clientes;
+DROP POLICY IF EXISTS "Permitir acesso total anonimo para clientes" ON public.clientes;
+
+DROP POLICY IF EXISTS "Permitir acesso de leitura anonimo para pessoas_contato" ON public.pessoas_contato;
+DROP POLICY IF EXISTS "Permitir acesso total anonimo para pessoas_contato" ON public.pessoas_contato;
+
+DROP POLICY IF EXISTS "Permitir acesso de leitura anonimo para cliente_anexos" ON public.cliente_anexos;
+DROP POLICY IF EXISTS "Permitir acesso total anonimo para cliente_anexos" ON public.cliente_anexos;
+
+-- Cria uma nova política que permite TODAS as operações (SELECT, INSERT, UPDATE, DELETE) para usuários anônimos.
+-- Isso é necessário para que o CRUD funcione sem um sistema de login ativo.
+CREATE POLICY "Permitir acesso total anonimo para clientes"
+ON public.clientes
+FOR ALL
+TO anon
+USING (true)
+WITH CHECK (true);
+
+CREATE POLICY "Permitir acesso total anonimo para pessoas_contato"
+ON public.pessoas_contato
+FOR ALL
+TO anon
+USING (true)
+WITH CHECK (true);
+
+CREATE POLICY "Permitir acesso total anonimo para cliente_anexos"
+ON public.cliente_anexos
+FOR ALL
+TO anon
+USING (true)
+WITH CHECK (true);

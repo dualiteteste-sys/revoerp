@@ -1,0 +1,28 @@
+import { supabase } from '../lib/supabaseClient';
+		import { PostgrestError } from '@supabase/supabase-js';
+		import { DashboardStats, FaturamentoMensal } from '../types';
+		import { IDashboardRepository } from './interfaces';
+		export class DashboardRepository implements IDashboardRepository {
+		  protected supabase = supabase;
+		  protected handleError(error: PostgrestError | null, context?: string): void {
+		    if (error) {
+		      console.error(`Error in DashboardRepository${context ? ` (${context})` : ''}:`, error);
+		      throw new Error(error.message);
+		    }
+		  }
+		  async getDashboardStats(): Promise<DashboardStats> {
+		    console.warn('[Modo de Construção] Chamada para getDashboardStats bloqueada. Retornando dados zerados.');
+		    return Promise.resolve({
+		      faturamentoTotalMesAtual: 0,
+		      faturamentoTotalMesAnterior: 0,
+		      novosClientesMesAtual: 0,
+		      novosClientesMesAnterior: 0,
+		      pedidosRealizadosMesAtual: 0,
+		      pedidosRealizadosMesAnterior: 0,
+		    });
+		  }
+		  async getFaturamentoMensal(): Promise<FaturamentoMensal[]> {
+		    console.warn('[Modo de Construção] Chamada para getFaturamentoMensal bloqueada. Retornando dados vazios.');
+		    return Promise.resolve([]);
+		  }
+		}

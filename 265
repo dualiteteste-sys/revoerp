@@ -1,0 +1,17 @@
+import { BaseRepository } from './BaseRepository';
+		import { FluxoCaixa } from '../types';
+
+		export class FluxoCaixaRepository extends BaseRepository<FluxoCaixa> {
+		  constructor() {
+		    super('fluxo_caixa');
+		  }
+
+		  protected createEntity(data: any): FluxoCaixa {
+		    return data as FluxoCaixa;
+		  }
+
+		  async findAll(): Promise<FluxoCaixa[]> {
+		    console.warn('[Modo de Construção] Chamada para FluxoCaixaRepository.findAll bloqueada.');
+		    return [];
+		  }
+		}

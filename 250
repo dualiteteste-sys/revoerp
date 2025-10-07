@@ -1,0 +1,24 @@
+import { BaseRepository } from './BaseRepository';
+		import { CategoriaFinanceira } from '../types';
+		import { ICategoriaFinanceiraRepository } from './interfaces';
+
+		export class CategoriaFinanceiraRepository extends BaseRepository<CategoriaFinanceira> implements ICategoriaFinanceiraRepository {
+		  constructor() {
+		    super('categorias_financeiras');
+		  }
+
+		  protected createEntity(data: Omit<CategoriaFinanceira, 'id' | 'createdAt' | 'updatedAt'>): CategoriaFinanceira {
+		    return {
+		      ...data,
+		      id: '',
+		      ativo: true,
+		      createdAt: new Date(),
+		      updatedAt: new Date(),
+		    };
+		  }
+
+		  async findAll(options: { page?: number; pageSize?: number } = {}): Promise<{ data: CategoriaFinanceira[]; count: number }> {
+		    console.warn('[Modo de Construção] Chamada para CategoriaFinanceiraRepository.findAll bloqueada.');
+		    return { data: [], count: 0 };
+		  }
+		}

@@ -1,0 +1,24 @@
+import { BaseRepository } from './BaseRepository';
+		import { FormaPagamento } from '../types';
+		import { IFormaPagamentoRepository } from './interfaces';
+
+		export class FormaPagamentoRepository extends BaseRepository<FormaPagamento> implements IFormaPagamentoRepository {
+		  constructor() {
+		    super('formas_pagamento');
+		  }
+
+		  protected createEntity(data: Omit<FormaPagamento, 'id' | 'createdAt' | 'updatedAt'>): FormaPagamento {
+		    return {
+		      ...data,
+		      id: '',
+      ativo: true,
+		      createdAt: new Date(),
+		      updatedAt: new Date(),
+		    };
+		  }
+
+		  async findAll(options: { page?: number; pageSize?: number } = {}): Promise<{ data: FormaPagamento[]; count: number }> {
+		    console.warn('[Modo de Construção] Chamada para FormaPagamentoRepository.findAll bloqueada.');
+		    return { data: [], count: 0 };
+		  }
+		}

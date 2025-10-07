@@ -1,0 +1,86 @@
+/*
+		          # [Operation Name]
+		          Criação da tabela 'vendedores' e ajuste de 'clientes'
+
+		          ## Query Description: [Este script cria a tabela 'vendedores' para armazenar os dados da equipe de vendas e adiciona uma coluna 'vendedor_id' na tabela 'clientes' para criar o relacionamento entre eles. Isso é necessário para o funcionamento do formulário de cadastro de clientes.]
+
+		          ## Metadata:
+		          - Schema-Category: ["Structural"]
+		          - Impact-Level: ["Low"]
+		          - Requires-Backup: [false]
+		          - Reversible: [true]
+
+		          ## Structure Details:
+		          - Cria a tabela 'vendedores'.
+		          - Adiciona a coluna 'vendedor_id' à tabela 'clientes'.
+		          - Adiciona uma chave estrangeira de 'clientes.vendedor_id' para 'vendedores.id'.
+
+		          ## Security Implications:
+		          - RLS Status: [Enabled]
+		          - Policy Changes: [Yes]
+		          - Auth Requirements: [authenticated]
+
+		          ## Performance Impact:
+		          - Indexes: [Added]
+		          - Triggers: [No]
+		          - Estimated Impact: [Baixo]
+		          */
+
+		-- Tabela para Vendedores
+		CREATE TABLE IF NOT EXISTS public.vendedores (
+		    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+		    user_id uuid UNIQUE REFERENCES auth.users(id) ON DELETE SET NULL,
+		    nome text NOT NULL,
+		    fantasia text,
+		    codigo text,
+		    tipo_pessoa tipo_pessoa_vendedor DEFAULT 'Física',
+		    cpf_cnpj text NOT NULL,
+		    contribuinte contribuinte_icms DEFAULT '9 - Não Contribuinte, que pode ou não possuir Inscrição Estadual no Cadastro de Contribuintes do ICMS',
+		    inscricao_estadual text,
+		    cep text,
+		    cidade text,
+		    uf text,
+		    logradouro text,
+		    bairro text,
+		    numero text,
+		    complemento text,
+		    telefone text,
+		    celular text,
+		    email text NOT NULL,
+		    situacao situacao_vendedor DEFAULT 'Ativo com acesso ao sistema',
+		    deposito text,
+		    email_comunicacoes text,
+		    regra_liberacao_comissao regra_comissao DEFAULT 'Liberação parcial (pelo pagamento)',
+		    tipo_comissao tipo_comissao_vendedor DEFAULT 'Comissão com alíquota fixa',
+		    aliquota_comissao numeric,
+		    desconsiderar_comissao_linha_produto boolean DEFAULT false,
+		    observacoes text,
+		    ativo boolean DEFAULT true,
+		    created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+		    updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+		);
+
+		-- Adiciona a coluna vendedor_id na tabela clientes se ela não existir
+		DO $$
+		BEGIN
+		    IF NOT EXISTS (
+		        SELECT FROM pg_attribute
+		        WHERE  attrelid = 'public.clientes'::regclass
+		        AND    attname = 'vendedor_id'
+		    ) THEN
+		        ALTER TABLE public.clientes ADD COLUMN vendedor_id uuid REFERENCES public.vendedores(id) ON DELETE SET NULL;
+		    END IF;
+		END
+		$$;
+
+		-- Habilita RLS para vendedores
+		ALTER TABLE public.vendedores ENABLE ROW LEVEL SECURITY;
+
+		-- Policies para vendedores
+		DROP POLICY IF EXISTS "Permite acesso total para usuários autenticados" ON public.vendedores;
+		CREATE POLICY "Permite acesso total para usuários autenticados"
+		ON public.vendedores
+		FOR ALL
+		TO authenticated
+		USING (true)
+		WITH CHECK (true);

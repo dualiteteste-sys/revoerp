@@ -1,0 +1,66 @@
+import { useState, useEffect, useCallback } from 'react';
+import { DashboardStats, FaturamentoMensal } from '../../types';
+import { useService } from '../useService';
+import toast from 'react-hot-toast';
+
+export const useDashboard = () => {
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [faturamentoMensal, setFaturamentoMensal] = useState<FaturamentoMensal[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const service = useService('dashboard');
+
+  const loadDashboardData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const [statsData, faturamentoData] = await Promise.all([
+        service.getDashboardStats(),
+        service.getFaturamentoMensal(),
+      ]);
+      setStats(statsData);
+      setFaturamentoMensal(faturamentoData);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
+      
+      // Verifica se o erro é por função não encontrada, o que é esperado após o reset.
+      const isFunctionNotFoundError = (
+        errorMessage.includes('does not exist') || 
+        errorMessage.includes('PGRST202')
+      );
+
+      if (isFunctionNotFoundError) {
+        // Define um estado padrão e vazio para que a UI não quebre.
+        console.warn('Funções do dashboard não encontradas. Isso é esperado após o reset do banco de dados. Exibindo UI sem dados.');
+        setStats({
+          faturamentoTotalMesAtual: 0,
+          faturamentoTotalMesAnterior: 0,
+          novosClientesMesAtual: 0,
+          novosClientesMesAnterior: 0,
+          pedidosRealizadosMesAtual: 0,
+          pedidosRealizadosMesAnterior: 0,
+        });
+        setFaturamentoMensal([]);
+        setError(null); // Limpa o erro para não exibir mensagem na tela.
+      } else {
+        // Para qualquer outro erro, exibe a notificação.
+        setError(errorMessage);
+        toast.error(errorMessage);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [service]);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
+  return {
+    stats,
+    faturamentoMensal,
+    loading,
+    error,
+    loadDashboardData,
+  };
+};

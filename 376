@@ -1,0 +1,126 @@
+/*
+          # [DANGEROUS] Reset Completo do Banco de Dados
+          Este script irá remover PERMANENTEMENTE todas as tabelas, views, funções e tipos customizados do schema 'public'.
+          Esta ação é IRREVERSÍVEL e resultará na PERDA TOTAL de todos os dados armazenados.
+
+          ## Query Description: [ATENÇÃO: Este script apaga todos os dados do seu banco de dados. Execute-o somente se você tiver certeza de que deseja recomeçar do zero. É altamente recomendável fazer um backup antes de prosseguir, caso haja algum dado que queira salvar.]
+          
+          ## Metadata:
+          - Schema-Category: "Dangerous"
+          - Impact-Level: "High"
+          - Requires-Backup: true
+          - Reversible: false
+          
+          ## Structure Details:
+          - Remove todas as tabelas, incluindo clientes, produtos, pedidos, etc.
+          - Remove todas as views, como as de comissões e estoque.
+          - Remove todas as funções, como as do dashboard.
+          - Remove todos os tipos ENUM customizados.
+          
+          ## Security Implications:
+          - RLS Status: Todas as políticas serão removidas junto com as tabelas.
+          - Policy Changes: Yes
+          - Auth Requirements: N/A
+          
+          ## Performance Impact:
+          - Indexes: Removidos
+          - Triggers: Removidos
+          - Estimated Impact: A aplicação frontend não conseguirá buscar ou salvar dados até que as tabelas e funções sejam recriadas.
+          */
+
+-- Desabilitando RLS em todas as tabelas antes de dropar (Boa prática)
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+        EXECUTE 'ALTER TABLE public.' || quote_ident(r.tablename) || ' DISABLE ROW LEVEL SECURITY';
+    END LOOP;
+END $$;
+
+-- Drop all views
+DROP VIEW IF EXISTS public.comissoes_view;
+DROP VIEW IF EXISTS public.ordens_servico_view;
+DROP VIEW IF EXISTS public.produtos_com_estoque;
+DROP VIEW IF EXISTS public.dre_mensal;
+
+-- Drop all functions
+DROP FUNCTION IF EXISTS public.get_dashboard_stats();
+DROP FUNCTION IF EXISTS public.get_faturamento_ultimos_12_meses();
+DROP FUNCTION IF EXISTS public.get_visao_cobrancas(p_ano integer, p_mes integer);
+DROP FUNCTION IF EXISTS public.get_contratos_para_faturar(p_ano integer, p_mes integer);
+DROP FUNCTION IF EXISTS public.handle_new_user();
+
+-- Drop all tables
+DROP TABLE IF EXISTS public.pessoas_contato CASCADE;
+DROP TABLE IF EXISTS public.cliente_anexos CASCADE;
+DROP TABLE IF EXISTS public.produto_imagens CASCADE;
+DROP TABLE IF EXISTS public.produto_anuncios CASCADE;
+DROP TABLE IF EXISTS public.produtos_fornecedores CASCADE;
+DROP TABLE IF EXISTS public.contas_pagar_anexos CASCADE;
+DROP TABLE IF EXISTS public.contas_receber_anexos CASCADE;
+DROP TABLE IF EXISTS public.user_permissions CASCADE;
+DROP TABLE IF EXISTS public.ordem_servico_itens CASCADE;
+DROP TABLE IF EXISTS public.ordem_servico_anexos CASCADE;
+DROP TABLE IF EXISTS public.pedido_venda_itens CASCADE;
+DROP TABLE IF EXISTS public.pedido_venda_anexos CASCADE;
+DROP TABLE IF EXISTS public.devolucao_venda_itens CASCADE;
+DROP TABLE IF EXISTS public.contrato_anexos CASCADE;
+DROP TABLE IF EXISTS public.nota_entrada_itens CASCADE;
+DROP TABLE IF EXISTS public.expedicao_pedidos CASCADE;
+DROP TABLE IF EXISTS public.comissoes CASCADE;
+DROP TABLE IF EXISTS public.devolucoes_venda CASCADE;
+DROP TABLE IF EXISTS public.fluxo_caixa CASCADE;
+DROP TABLE IF EXISTS public.contas_pagar CASCADE;
+DROP TABLE IF EXISTS public.contas_receber CASCADE;
+DROP TABLE IF EXISTS public.faturas_venda CASCADE;
+DROP TABLE IF EXISTS public.notas_entrada CASCADE;
+DROP TABLE IF EXISTS public.ordem_compra_itens CASCADE;
+DROP TABLE IF EXISTS public.ordens_compra CASCADE;
+DROP TABLE IF EXISTS public.ordens_servico CASCADE;
+DROP TABLE IF EXISTS public.pedidos_venda CASCADE;
+DROP TABLE IF EXISTS public.expedicoes CASCADE;
+DROP TABLE IF EXISTS public.contratos CASCADE;
+DROP TABLE IF EXISTS public.embalagens CASCADE;
+DROP TABLE IF EXISTS public.servicos CASCADE;
+DROP TABLE IF EXISTS public.produtos CASCADE;
+DROP TABLE IF EXISTS public.vendedores CASCADE;
+DROP TABLE IF EXISTS public.clientes CASCADE;
+DROP TABLE IF EXISTS public.configuracoes CASCADE;
+DROP TABLE IF EXISTS public.categorias_financeiras CASCADE;
+DROP TABLE IF EXISTS public.formas_pagamento CASCADE;
+DROP TABLE IF EXISTS public.estoque_movimentos CASCADE;
+DROP TABLE IF EXISTS public.crm_oportunidades CASCADE;
+
+-- Drop all custom types (enums)
+DROP TYPE IF EXISTS public.tipo_pessoa;
+DROP TYPE IF EXISTS public.contribuinte_icms;
+DROP TYPE IF EXISTS public.cliente_situacao;
+DROP TYPE IF EXISTS public.status_comissao;
+DROP TYPE IF EXISTS public.contrato_situacao;
+DROP TYPE IF EXISTS public.contrato_vencimento_regra;
+DROP TYPE IF EXISTS public.contrato_periodicidade;
+DROP TYPE IF EXISTS public.crm_etapa;
+DROP TYPE IF EXISTS public.tipo_embalagem;
+DROP TYPE IF EXISTS public.status_expedicao;
+DROP TYPE IF EXISTS public.status_fatura;
+DROP TYPE IF EXISTS public.status_conta_receber;
+DROP TYPE IF EXISTS public.status_conta_pagar;
+DROP TYPE IF EXISTS public.ocorrencia_conta;
+DROP TYPE IF EXISTS public.tipo_movimento_caixa;
+DROP TYPE IF EXISTS public.tipo_categoria_financeira;
+DROP TYPE IF EXISTS public.status_nota_entrada;
+DROP TYPE IF EXISTS public.frete_por_conta;
+DROP TYPE IF EXISTS public.status_ordem_compra;
+DROP TYPE IF EXISTS public.status_os;
+DROP TYPE IF EXISTS public.prioridade_os;
+DROP TYPE IF EXISTS public.status_pedido_venda;
+DROP TYPE IF EXISTS public.tipo_produto;
+DROP TYPE IF EXISTS public.situacao_produto;
+DROP TYPE IF EXISTS public.origem_produto;
+DROP TYPE IF EXISTS public.tipo_embalagem_produto;
+DROP TYPE IF EXISTS public.embalagem_produto;
+DROP TYPE IF EXISTS public.tipo_pessoa_vendedor;
+DROP TYPE IF EXISTS public.situacao_vendedor;
+DROP TYPE IF EXISTS public.regra_comissao;
+DROP TYPE IF EXISTS public.tipo_comissao_vendedor;

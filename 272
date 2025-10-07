@@ -1,0 +1,57 @@
+import { BaseRepository } from './BaseRepository';
+		import { Produto, ProdutoImagem, ProdutoAnuncio, ProdutoFornecedor } from '../types';
+		import { camelToSnake, snakeToCamel } from '../lib/utils';
+
+		export class ProdutoRepository extends BaseRepository<Produto> {
+		  constructor() {
+		    super('produtos');
+		  }
+
+		  protected createEntity(data: Omit<Produto, 'id' | 'createdAt' | 'updatedAt'>): Produto {
+		    return {
+		      ...data,
+		      id: '',
+		      createdAt: new Date(),
+		      updatedAt: new Date(),
+		      imagens: [],
+		      anuncios: [],
+		      fornecedores: [],
+		      permitirVendas: true,
+		    };
+		  }
+
+		  async search(query: string): Promise<Pick<Produto, 'id' | 'nome' | 'precoVenda' | 'codigo' | 'unidade'>[]> {
+		    console.warn('[Modo de Construção] Chamada para ProdutoRepository.search bloqueada.');
+		    return [];
+		  }
+
+		  async findAll(options: { page?: number; pageSize?: number } = {}): Promise<{ data: Produto[]; count: number }> {
+		    console.warn('[Modo de Construção] Chamada para ProdutoRepository.findAll bloqueada.');
+		    return { data: [], count: 0 };
+		  }
+
+		  async findById(id: string): Promise<Produto | null> {
+		    console.warn('[Modo de Construção] Chamada para ProdutoRepository.findById bloqueada.');
+		    return null;
+		  }
+
+		  async create(data: Partial<Omit<Produto, 'id' | 'createdAt' | 'updatedAt'>>): Promise<Produto> {
+		    console.warn('[Modo de Construção] Chamada para ProdutoRepository.create bloqueada.');
+		    throw new Error("Funcionalidade desativada durante a reconstrução.");
+		  }
+
+		  async update(id: string, updates: Partial<Produto>): Promise<Produto> {
+		    console.warn('[Modo de Construção] Chamada para ProdutoRepository.update bloqueada.');
+		    throw new Error("Funcionalidade desativada durante a reconstrução.");
+		  }
+
+		  async uploadImagem(produtoId: string, file: File): Promise<string> {
+		    console.warn('[Modo de Construção] Chamada para ProdutoRepository.uploadImagem bloqueada.');
+		    throw new Error("Funcionalidade desativada durante a reconstrução.");
+		  }
+
+		  async deleteImagem(imagemId: string, filePath: string): Promise<void> {
+		    console.warn('[Modo de Construção] Chamada para ProdutoRepository.deleteImagem bloqueada.');
+		    throw new Error("Funcionalidade desativada durante a reconstrução.");
+		  }
+		}

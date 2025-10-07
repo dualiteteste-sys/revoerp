@@ -1,0 +1,165 @@
+/*
+		          # [RESET E CRIAÇÃO DO MÓDULO DE CLIENTES]
+		          Este script apaga as tabelas e tipos relacionados ao módulo de clientes e os recria do zero.
+		          É uma operação segura para o estado atual do desenvolvimento, pois garante um ambiente limpo.
+
+		          ## Query Description: [Este script irá apagar as tabelas 'clientes', 'pessoas_contato', 'cliente_anexos' e os tipos de dados ('enums') associados a elas, caso existam. Em seguida, irá recriá-los com a estrutura correta e inserir 5 registros de clientes falsos para teste.]
+		          
+		          ## Metadata:
+		          - Schema-Category: ["Dangerous", "Structural", "Data"]
+		          - Impact-Level: ["High"]
+		          - Requires-Backup: [false]
+		          - Reversible: [false]
+		          
+		          ## Structure Details:
+		          - Tabelas afetadas: clientes, pessoas_contato, cliente_anexos
+		          - Tipos afetados: tipo_pessoa, contribuinte_icms
+		          
+		          ## Security Implications:
+		          - RLS Status: [Enabled]
+		          - Policy Changes: [Yes]
+		          - Auth Requirements: [authenticated]
+		          
+		          ## Performance Impact:
+		          - Indexes: [Added]
+		          - Triggers: [None]
+		          - Estimated Impact: [Baixo, tabelas sendo criadas do zero.]
+		          */
+
+		-- Apaga as tabelas e tipos existentes em cascata para evitar erros de dependência.
+		DROP TABLE IF EXISTS public.pessoas_contato CASCADE;
+		DROP TABLE IF EXISTS public.cliente_anexos CASCADE;
+		DROP TABLE IF EXISTS public.clientes CASCADE;
+		DROP TYPE IF EXISTS public.tipo_pessoa CASCADE;
+		DROP TYPE IF EXISTS public.contribuinte_icms CASCADE;
+
+		-- Recria os tipos ENUM com valores simplificados
+		CREATE TYPE public.tipo_pessoa AS ENUM ('FISICA', 'JURIDICA', 'ESTRANGEIRO');
+		CREATE TYPE public.contribuinte_icms AS ENUM ('CONTRIBUINTE', 'CONTRIBUINTE_ISENTO', 'NAO_CONTRIBUINTE');
+
+		-- Recria a tabela de clientes
+		CREATE TABLE public.clientes (
+		    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+		    codigo character varying,
+		    nome character varying NOT NULL,
+		    nome_fantasia character varying,
+		    tipo_pessoa tipo_pessoa DEFAULT 'FISICA'::tipo_pessoa,
+		    cpf_cnpj character varying,
+		    rg character varying,
+		    inscricao_estadual character varying,
+		    inscricao_municipal character varying,
+		    contribuinte_icms contribuinte_icms DEFAULT 'NAO_CONTRIBUINTE'::contribuinte_icms,
+		    is_cliente boolean DEFAULT true,
+		    is_fornecedor boolean DEFAULT false,
+		    is_transportadora boolean DEFAULT false,
+		    logradouro character varying,
+		    numero character varying,
+		    complemento character varying,
+		    bairro character varying,
+		    cep character varying,
+		    cidade character varying,
+		    estado character varying,
+		    pais character varying DEFAULT 'Brasil'::character varying,
+		    cobranca_logradouro character varying,
+		    cobranca_numero character varying,
+		    cobranca_complemento character varying,
+		    cobranca_bairro character varying,
+		    cobranca_cep character varying,
+		    cobranca_cidade character varying,
+		    cobranca_estado character varying,
+		    telefone_adicional character varying,
+		    celular character varying,
+		    email character varying,
+		    email_nfe character varying,
+		    site character varying,
+		    estado_civil character varying,
+		    profissao character varying,
+		    sexo character varying,
+		    data_nascimento date,
+		    naturalidade character varying,
+		    status_crm character varying,
+		    condicao_pagamento_padrao_id character varying,
+		    limite_credito numeric,
+		    observacoes text,
+		    created_at timestamp with time zone DEFAULT now(),
+		    updated_at timestamp with time zone DEFAULT now()
+		);
+
+		-- Recria a tabela de pessoas de contato
+		CREATE TABLE public.pessoas_contato (
+		    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+		    cliente_id uuid NOT NULL REFERENCES public.clientes(id) ON DELETE CASCADE,
+		    nome character varying NOT NULL,
+		    setor character varying,
+		    email character varying,
+		    telefone character varying,
+		    ramal character varying,
+		    created_at timestamp with time zone DEFAULT now(),
+		    updated_at timestamp with time zone DEFAULT now()
+		);
+
+		-- Recria a tabela de anexos de clientes
+		CREATE TABLE public.cliente_anexos (
+		    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+		    cliente_id uuid NOT NULL REFERENCES public.clientes(id) ON DELETE CASCADE,
+		    nome_arquivo character varying NOT NULL,
+		    path character varying NOT NULL,
+		    tamanho bigint NOT NULL,
+		    tipo character varying NOT NULL,
+		    created_at timestamp with time zone DEFAULT now(),
+		    updated_at timestamp with time zone DEFAULT now()
+		);
+
+		-- Habilita RLS e cria políticas
+		ALTER TABLE public.clientes ENABLE ROW LEVEL SECURITY;
+		ALTER TABLE public.pessoas_contato ENABLE ROW LEVEL SECURITY;
+		ALTER TABLE public.cliente_anexos ENABLE ROW LEVEL SECURITY;
+
+		CREATE POLICY "Allow authenticated users to access clientes" ON public.clientes FOR ALL TO authenticated USING (true);
+		CREATE POLICY "Allow authenticated users to access pessoas_contato" ON public.pessoas_contato FOR ALL TO authenticated USING (true);
+		CREATE POLICY "Allow authenticated users to access cliente_anexos" ON public.cliente_anexos FOR ALL TO authenticated USING (true);
+
+		-- Insere 5 registros de clientes falsos
+		DO $$
+		DECLARE
+		    cliente_id_1 UUID;
+		    cliente_id_2 UUID;
+		    cliente_id_3 UUID;
+		    cliente_id_4 UUID;
+		    cliente_id_5 UUID;
+		BEGIN
+		    -- Cliente 1
+		    INSERT INTO public.clientes (codigo, nome, tipo_pessoa, cpf_cnpj, rg, contribuinte_icms, is_cliente, logradouro, numero, bairro, cep, cidade, estado, celular, email)
+		    VALUES ('C001', 'João da Silva', 'FISICA', '123.456.789-01', '12.345.678-9', 'NAO_CONTRIBUINTE', true, 'Rua das Flores', '123', 'Jardim Primavera', '12345-678', 'São Paulo', 'SP', '(11) 98765-4321', 'joao.silva@example.com')
+		    RETURNING id INTO cliente_id_1;
+		    INSERT INTO public.pessoas_contato (cliente_id, nome, email) VALUES (cliente_id_1, 'Maria (Esposa)', 'maria.silva@example.com');
+		    INSERT INTO public.cliente_anexos (cliente_id, nome_arquivo, path, tamanho, tipo) VALUES (cliente_id_1, 'doc.pdf', 'placeholders/doc.pdf', 1024, 'application/pdf');
+
+		    -- Cliente 2
+		    INSERT INTO public.clientes (codigo, nome, tipo_pessoa, cpf_cnpj, contribuinte_icms, is_fornecedor, logradouro, numero, bairro, cep, cidade, estado, celular, email)
+		    VALUES ('F002', 'Empresa XYZ Ltda', 'JURIDICA', '12.345.678/0001-99', 'CONTRIBUINTE', true, 'Avenida Principal', '1000', 'Centro', '98765-432', 'Rio de Janeiro', 'RJ', '(21) 99999-8888', 'contato@xyz.com')
+		    RETURNING id INTO cliente_id_2;
+		    INSERT INTO public.pessoas_contato (cliente_id, nome, email, setor) VALUES (cliente_id_2, 'Carlos (Compras)', 'carlos@xyz.com', 'Compras');
+		    INSERT INTO public.cliente_anexos (cliente_id, nome_arquivo, path, tamanho, tipo) VALUES (cliente_id_2, 'contrato.pdf', 'placeholders/contrato.pdf', 2048, 'application/pdf');
+
+		    -- Cliente 3
+		    INSERT INTO public.clientes (codigo, nome, tipo_pessoa, cpf_cnpj, contribuinte_icms, is_cliente, is_fornecedor, logradouro, numero, bairro, cep, cidade, estado, celular, email)
+		    VALUES ('CF003', 'Ana Souza', 'FISICA', '987.654.321-00', 'NAO_CONTRIBUINTE', true, true, 'Praça da Matriz', 'S/N', 'Vila Nova', '54321-876', 'Belo Horizonte', 'MG', '(31) 98888-7777', 'ana.souza@example.com')
+		    RETURNING id INTO cliente_id_3;
+		    INSERT INTO public.pessoas_contato (cliente_id, nome, email) VALUES (cliente_id_3, 'Pedro (Irmão)', 'pedro.souza@example.com');
+		    INSERT INTO public.cliente_anexos (cliente_id, nome_arquivo, path, tamanho, tipo) VALUES (cliente_id_3, 'id.jpg', 'placeholders/id.jpg', 512, 'image/jpeg');
+
+		    -- Cliente 4
+		    INSERT INTO public.clientes (codigo, nome, tipo_pessoa, cpf_cnpj, contribuinte_icms, is_transportadora, logradouro, numero, bairro, cep, cidade, estado, celular, email)
+		    VALUES ('T004', 'Transportadora Rápida S.A.', 'JURIDICA', '98.765.432/0001-11', 'CONTRIBUINTE', true, 'Rodovia BR-101', 'Km 50', 'Distrito Industrial', '29168-090', 'Serra', 'ES', '(27) 97777-6666', 'logistica@rapida.com')
+		    RETURNING id INTO cliente_id_4;
+		    INSERT INTO public.pessoas_contato (cliente_id, nome, email, setor) VALUES (cliente_id_4, 'Fernanda (Logística)', 'fernanda@rapida.com', 'Logística');
+		    INSERT INTO public.cliente_anexos (cliente_id, nome_arquivo, path, tamanho, tipo) VALUES (cliente_id_4, 'licenca.pdf', 'placeholders/licenca.pdf', 1536, 'application/pdf');
+
+		    -- Cliente 5
+		    INSERT INTO public.clientes (codigo, nome, tipo_pessoa, cpf_cnpj, contribuinte_icms, is_cliente, logradouro, numero, bairro, cep, cidade, estado, celular, email)
+		    VALUES ('C005', 'Marta Lima', 'FISICA', '111.222.333-44', 'CONTRIBUINTE_ISENTO', true, 'Rua dos Coqueiros', '404', 'Praia da Costa', '29101-210', 'Vila Velha', 'ES', '(27) 96666-5555', 'marta.lima@example.com')
+		    RETURNING id INTO cliente_id_5;
+		    INSERT INTO public.pessoas_contato (cliente_id, nome, email) VALUES (cliente_id_5, 'Juliana (Filha)', 'juliana.lima@example.com');
+		    INSERT INTO public.cliente_anexos (cliente_id, nome_arquivo, path, tamanho, tipo) VALUES (cliente_id_5, 'comprovante.png', 'placeholders/comprovante.png', 768, 'image/png');
+		END $$;

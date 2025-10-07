@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+      sans-serif;
+  }
+
+  /* Scrollbar customizada */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .form-checkbox {
+    @apply rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-offset-0 focus:ring-blue-200 focus:ring-opacity-50;
+  }
+  
+  .form-radio {
+      @apply text-blue-600 border-gray-300 focus:ring-blue-500;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/70 backdrop-blur-xl border border-white/30 rounded-2xl shadow-2xl shadow-blue-500/10;
+  }
+  
+  .glass-button {
+    @apply bg-white/60 backdrop-blur-sm border border-white/30 rounded-xl 
+           hover:bg-white/80 hover:shadow-lg hover:shadow-blue-500/10 transition-all duration-200 
+           active:scale-95;
+  }
+  
+  .glass-input {
+    @apply w-full px-4 py-3 bg-gray-100/50 border-2 border-transparent rounded-xl 
+           focus:outline-none focus:ring-2 focus:ring-blue-400/50 
+           focus:border-blue-300 transition-all;
+  }
+  
+  .glass-badge {
+    @apply px-3 py-1 text-xs font-medium rounded-full border;
+  }
+
+  /* Custom Switch */
+  .form-switch {
+    @apply relative inline-flex items-center h-6 rounded-full w-11 cursor-pointer transition-colors;
+  }
+  .form-switch-checkbox {
+    @apply w-0 h-0 opacity-0;
+  }
+  .form-switch-label {
+    @apply absolute top-0 left-0 w-full h-full bg-gray-300/70 rounded-full transition-colors;
+  }
+  .form-switch-knob {
+    @apply absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-300 ease-in-out;
+  }
+  .form-switch-checkbox:checked + .form-switch-label {
+    @apply bg-blue-600;
+  }
+  .form-switch-checkbox:checked ~ .form-switch-knob {
+    transform: translateX(20px);
+  }
+}

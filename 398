@@ -1,0 +1,190 @@
+-- Habilita a extensão pgcrypto se ainda não estiver habilitada
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- Tabela de Perfis de Usuário
+-- Armazena dados adicionais dos usuários do sistema.
+CREATE TABLE IF NOT EXISTS public.perfis (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    empresa_id UUID REFERENCES public.empresas(id) ON DELETE SET NULL,
+    nome_completo TEXT,
+    cpf TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+COMMENT ON TABLE public.perfis IS 'Tabela de perfis para usuários do sistema, estendendo auth.users.';
+
+-- Tabela de Papéis (Funções)
+-- Define os diferentes papéis que um usuário pode ter (ex: Admin, Vendedor).
+CREATE TABLE IF NOT EXISTS public.papeis (
+    id SERIAL PRIMARY KEY,
+    nome TEXT NOT NULL UNIQUE
+);
+COMMENT ON TABLE public.papeis IS 'Define os papéis (funções) de acesso, como Administrador, Vendedor, etc.';
+
+-- Tabela de Permissões
+-- Lista todas as ações granulares possíveis no sistema.
+CREATE TABLE IF NOT EXISTS public.permissoes (
+    id TEXT PRIMARY KEY,
+    descricao TEXT
+);
+COMMENT ON TABLE public.permissoes IS 'Catálogo de todas as permissões granulares do sistema (ex: clientes.criar).';
+
+-- Tabela de Junção: Papel <-> Permissões
+-- Associa múltiplas permissões a um papel.
+CREATE TABLE IF NOT EXISTS public.papel_permissoes (
+    papel_id INTEGER REFERENCES public.papeis(id) ON DELETE CASCADE,
+    permissao_id TEXT REFERENCES public.permissoes(id) ON DELETE CASCADE,
+    PRIMARY KEY (papel_id, permissao_id)
+);
+COMMENT ON TABLE public.papel_permissoes IS 'Tabela de junção para associar permissões a papéis.';
+
+-- Tabela de Junção: Usuário <-> Papéis
+-- Associa um ou mais papéis a um usuário.
+CREATE TABLE IF NOT EXISTS public.usuario_papeis (
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    papel_id INTEGER REFERENCES public.papeis(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, papel_id)
+);
+COMMENT ON TABLE public.usuario_papeis IS 'Tabela de junção para associar papéis a usuários.';
+
+-- Gatilho para criar um perfil de usuário automaticamente
+-- Este gatilho é acionado sempre que um novo usuário se cadastra no Supabase Auth.
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+DECLARE
+  empresa_padrao_id UUID;
+  is_first_user BOOLEAN;
+  admin_papel_id INTEGER;
+  membro_papel_id INTEGER;
+BEGIN
+  -- 1. Encontra a primeira empresa cadastrada para associar o novo usuário.
+  SELECT id INTO empresa_padrao_id FROM public.empresas ORDER BY created_at LIMIT 1;
+
+  -- 2. Insere o novo usuário na tabela de perfis.
+  INSERT INTO public.perfis (id, empresa_id, nome_completo, cpf)
+  VALUES (
+    new.id,
+    empresa_padrao_id,
+    new.raw_user_meta_data->>'full_name',
+    new.raw_user_meta_data->>'cpf_cnpj'
+  );
+
+  -- 3. Verifica se este é o primeiro usuário do sistema.
+  SELECT count(*) = 1 INTO is_first_user FROM auth.users;
+
+  -- 4. Obtém os IDs dos papéis 'Admin' e 'Membro'.
+  SELECT id INTO admin_papel_id FROM public.papeis WHERE nome = 'Admin';
+  SELECT id INTO membro_papel_id FROM public.papeis WHERE nome = 'Membro';
+
+  -- 5. Atribui o papel 'Admin' ao primeiro usuário e 'Membro' aos demais.
+  IF is_first_user THEN
+    INSERT INTO public.usuario_papeis (user_id, papel_id) VALUES (new.id, admin_papel_id);
+  ELSE
+    INSERT INTO public.usuario_papeis (user_id, papel_id) VALUES (new.id, membro_papel_id);
+  END IF;
+
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Define o search_path para segurança
+ALTER FUNCTION public.handle_new_user() SET search_path = public;
+
+-- Cria o trigger que chama a função acima após a criação de um usuário.
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Função para verificar permissões do usuário logado
+-- Esta função será usada nas políticas de segurança (RLS).
+CREATE OR REPLACE FUNCTION public.check_permission(permission_to_check TEXT)
+RETURNS BOOLEAN AS $$
+DECLARE
+  has_permission BOOLEAN;
+BEGIN
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.usuario_papeis up
+    JOIN public.papel_permissoes pp ON up.papel_id = pp.papel_id
+    WHERE up.user_id = auth.uid()
+    AND pp.permissao_id = permission_to_check
+  ) INTO has_permission;
+  RETURN has_permission;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+ALTER FUNCTION public.check_permission(text) SET search_path = public;
+
+-- Função para obter todas as permissões de um usuário.
+CREATE OR REPLACE FUNCTION public.get_user_permissions(p_user_id UUID)
+RETURNS TABLE(permission_id TEXT) AS $$
+BEGIN
+  RETURN QUERY
+    SELECT pp.permissao_id
+    FROM public.usuario_papeis up
+    JOIN public.papel_permissoes pp ON up.papel_id = pp.papel_id
+    WHERE up.user_id = p_user_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+ALTER FUNCTION public.get_user_permissions(uuid) SET search_path = public;
+
+-- Inserção de dados iniciais (Papéis e Permissões)
+-- Garante que a inserção só ocorra se as tabelas estiverem vazias.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.papeis) THEN
+    INSERT INTO public.papeis (nome) VALUES ('Admin'), ('Membro');
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM public.permissoes) THEN
+    INSERT INTO public.permissoes (id, descricao) VALUES
+      ('clientes.ler', 'Visualizar clientes e fornecedores'),
+      ('clientes.escrever', 'Criar e editar clientes e fornecedores'),
+      ('clientes.excluir', 'Excluir clientes e fornecedores'),
+      ('produtos.ler', 'Visualizar produtos'),
+      ('produtos.escrever', 'Criar e editar produtos'),
+      ('produtos.excluir', 'Excluir produtos'),
+      ('configuracoes.gerenciar_usuarios', 'Gerenciar usuários e permissões');
+  END IF;
+END $$;
+
+-- Associa permissões iniciais ao papel de Admin
+-- Garante que a inserção só ocorra se as associações não existirem.
+DO $$
+DECLARE
+  admin_id INTEGER;
+BEGIN
+  SELECT id INTO admin_id FROM public.papeis WHERE nome = 'Admin';
+  IF admin_id IS NOT NULL THEN
+    INSERT INTO public.papel_permissoes (papel_id, permissao_id)
+    SELECT admin_id, id FROM public.permissoes
+    ON CONFLICT (papel_id, permissao_id) DO NOTHING;
+  END IF;
+END $$;
+
+-- Habilita RLS e cria políticas de segurança para as novas tabelas
+ALTER TABLE public.perfis ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir leitura para usuários autenticados" ON public.perfis FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "Permitir que usuários atualizem seu próprio perfil" ON public.perfis FOR UPDATE USING (auth.uid() = id);
+
+ALTER TABLE public.papeis ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir leitura para usuários autenticados" ON public.papeis FOR SELECT USING (auth.role() = 'authenticated');
+
+ALTER TABLE public.permissoes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir leitura para usuários autenticados" ON public.permissoes FOR SELECT USING (auth.role() = 'authenticated');
+
+ALTER TABLE public.papel_permissoes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir acesso a admins" ON public.papel_permissoes FOR ALL USING (check_permission('configuracoes.gerenciar_usuarios'));
+
+ALTER TABLE public.usuario_papeis ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir acesso a admins" ON public.usuario_papeis FOR ALL USING (check_permission('configuracoes.gerenciar_usuarios'));
+CREATE POLICY "Permitir que usuários vejam seus próprios papéis" ON public.usuario_papeis FOR SELECT USING (auth.uid() = user_id);
+
+-- Aplica políticas de segurança na tabela de clientes
+ALTER TABLE public.clientes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir acesso de leitura" ON public.clientes;
+CREATE POLICY "Permitir acesso de leitura" ON public.clientes FOR SELECT USING (check_permission('clientes.ler'));
+DROP POLICY IF EXISTS "Permitir acesso de escrita" ON public.clientes;
+CREATE POLICY "Permitir acesso de escrita" ON public.clientes FOR ALL USING (check_permission('clientes.escrever')) WITH CHECK (check_permission('clientes.escrever'));
+DROP POLICY IF EXISTS "Permitir acesso de exclusão" ON public.clientes;
+CREATE POLICY "Permitir acesso de exclusão" ON public.clientes FOR DELETE USING (check_permission('clientes.excluir'));

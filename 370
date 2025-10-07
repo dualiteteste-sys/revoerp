@@ -1,0 +1,1330 @@
+/*
+  # [MVP] Script de Migração Inicial do Banco de Dados
+  Este script cria a estrutura de tabelas, tipos, funções e políticas de segurança
+  necessárias para o funcionamento do frontend do Revo ERP.
+
+  ## Descrição da Query: 
+  Este script é idempotente, o que significa que ele pode ser executado várias vezes
+  sem causar erros. Ele verifica a existência de cada objeto (tabela, tipo, função, etc.)
+  antes de criá-lo. Isso garante que, mesmo que a execução anterior tenha sido parcial,
+  esta nova execução completará a configuração sem duplicar itens.
+
+  ## Metadata:
+  - Schema-Category: ["Structural"]
+  - Impact-Level: ["Low"]
+  - Requires-Backup: false
+  - Reversible: false
+*/
+
+-- Habilitar a extensão pgcrypto se ainda não estiver habilitada
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- Enum para Tipo de Pessoa (Cliente)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tipo_pessoa') THEN
+        CREATE TYPE tipo_pessoa AS ENUM (
+            'FISICA',
+            'JURIDICA',
+            'ESTRANGEIRO'
+        );
+    END IF;
+END
+$$;
+
+-- Enum for Contribuinte ICMS
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'contribuinte_icms') THEN
+        CREATE TYPE contribuinte_icms AS ENUM (
+            'NAO_INFORMADO',
+            'CONTRIBUINTE_ICMS',
+            'CONTRIBUINTE_ISENTO',
+            'NAO_CONTRIBUINTE'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Tipo de Pessoa (Vendedor)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tipo_pessoa_vendedor') THEN
+        CREATE TYPE tipo_pessoa_vendedor AS ENUM (
+            'FISICA',
+            'JURIDICA',
+            'ESTRANGEIRO',
+            'ESTRANGEIRO_NO_BRASIL'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Situação do Vendedor
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'situacao_vendedor') THEN
+        CREATE TYPE situacao_vendedor AS ENUM (
+            'ATIVO_COM_ACESSO',
+            'ATIVO_SEM_ACESSO',
+            'INATIVO'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Regra de Comissão
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'regra_comissao') THEN
+        CREATE TYPE regra_comissao AS ENUM (
+            'LIBERACAO_PARCIAL',
+            'LIBERACAO_TOTAL_PEDIDO',
+            'LIBERACAO_TOTAL_PAGAMENTO'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Tipo de Comissão do Vendedor
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tipo_comissao_vendedor') THEN
+        CREATE TYPE tipo_comissao_vendedor AS ENUM (
+            'FIXA',
+            'POR_DESCONTO'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Tipo de Produto
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tipo_produto') THEN
+        CREATE TYPE tipo_produto AS ENUM (
+            'SIMPLES',
+            'COM_VARIACOES',
+            'KIT',
+            'FABRICADO',
+            'MATERIA_PRIMA'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Situação do Produto
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'situacao_produto') THEN
+        CREATE TYPE situacao_produto AS ENUM (
+            'ATIVO',
+            'INATIVO'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Origem do Produto
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'origem_produto') THEN
+        CREATE TYPE origem_produto AS ENUM (
+            'NACIONAL',
+            'ESTRANGEIRA_DIRETA',
+            'ESTRANGEIRA_INTERNO',
+            'NACIONAL_CONTEUDO_40_70',
+            'NACIONAL_PROCESSO_BASICO',
+            'NACIONAL_CONTEUDO_INF_40',
+            'ESTRANGEIRA_DIRETA_SEM_SIMILAR',
+            'ESTRANGEIRA_INTERNO_SEM_SIMILAR',
+            'NACIONAL_CONTEUDO_SUP_70'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Tipo de Embalagem
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tipo_embalagem') THEN
+        CREATE TYPE tipo_embalagem AS ENUM (
+            'ENVELOPE',
+            'CAIXA',
+            'CILINDRO'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Status da Ordem de Serviço
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_os') THEN
+        CREATE TYPE status_os AS ENUM (
+            'ABERTA',
+            'EM_ANDAMENTO',
+            'FINALIZADA',
+            'CANCELADA',
+            'ORCAMENTO'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Prioridade da Ordem de Serviço
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'prioridade_os') THEN
+        CREATE TYPE prioridade_os AS ENUM (
+            'BAIXA',
+            'MEDIA',
+            'ALTA',
+            'URGENTE'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Status do Pedido de Venda
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_pedido_venda') THEN
+        CREATE TYPE status_pedido_venda AS ENUM (
+            'ABERTO',
+            'FATURADO',
+            'CANCELADO'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Frete por Conta
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'frete_por_conta') THEN
+        CREATE TYPE frete_por_conta AS ENUM (
+            'CIF',
+            'FOB'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Status da Fatura
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_fatura') THEN
+        CREATE TYPE status_fatura AS ENUM (
+            'EMITIDA',
+            'PAGA',
+            'VENCIDA',
+            'CANCELADA'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Status de Conta a Receber
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_conta_receber') THEN
+        CREATE TYPE status_conta_receber AS ENUM (
+            'A_RECEBER',
+            'RECEBIDO',
+            'VENCIDO'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Ocorrência de Conta
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ocorrencia_conta') THEN
+        CREATE TYPE ocorrencia_conta AS ENUM (
+            'UNICA',
+            'RECORRENTE'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Status de Conta a Pagar
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_conta_pagar') THEN
+        CREATE TYPE status_conta_pagar AS ENUM (
+            'A_PAGAR',
+            'PAGO',
+            'VENCIDO'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Tipo de Movimento de Caixa
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tipo_movimento_caixa') THEN
+        CREATE TYPE tipo_movimento_caixa AS ENUM (
+            'ENTRADA',
+            'SAIDA'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Status de Comissão
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_comissao') THEN
+        CREATE TYPE status_comissao AS ENUM (
+            'PENDENTE',
+            'LIBERADA',
+            'PAGA',
+            'CANCELADA'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Situação do Contrato
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'contrato_situacao') THEN
+        CREATE TYPE contrato_situacao AS ENUM (
+            'ATIVO',
+            'DEMONSTRACAO',
+            'INATIVO',
+            'ISENTO',
+            'BAIXADO',
+            'ENCERRADO'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Regra de Vencimento do Contrato
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'contrato_vencimento_regra') THEN
+        CREATE TYPE contrato_vencimento_regra AS ENUM (
+            'MES_CORRENTE',
+            'MES_SEGUINTE'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Periodicidade do Contrato
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'contrato_periodicidade') THEN
+        CREATE TYPE contrato_periodicidade AS ENUM (
+            'MENSAL',
+            'BIMESTRAL',
+            'TRIMESTRAL',
+            'SEMESTRAL',
+            'ANUAL'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Status da Nota de Entrada
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_nota_entrada') THEN
+        CREATE TYPE status_nota_entrada AS ENUM (
+            'EM_DIGITACAO',
+            'FINALIZADA',
+            'CANCELADA'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Status da Expedição
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_expedicao') THEN
+        CREATE TYPE status_expedicao AS ENUM (
+            'AGUARDANDO_ENVIO',
+            'ENVIADO',
+            'ENTREGUE',
+            'CANCELADO'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Tipo de Categoria Financeira
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tipo_categoria_financeira') THEN
+        CREATE TYPE tipo_categoria_financeira AS ENUM (
+            'RECEITA',
+            'DESPESA'
+        );
+    END IF;
+END
+$$;
+
+-- Enum para Etapa do CRM
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'crm_etapa') THEN
+        CREATE TYPE crm_etapa AS ENUM (
+            'Lead',
+            'Prospecção',
+            'Negociação',
+            'Ganho',
+            'Perdido'
+        );
+    END IF;
+END
+$$;
+
+-- Tabela de Configurações
+CREATE TABLE IF NOT EXISTS public.configuracoes (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    chave VARCHAR(255) NOT NULL UNIQUE,
+    valor JSONB,
+    descricao TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.configuracoes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable read access for all users" ON public.configuracoes FOR SELECT USING (true);
+CREATE POLICY "Enable insert for authenticated users" ON public.configuracoes FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Enable update for authenticated users" ON public.configuracoes FOR UPDATE TO authenticated USING (true);
+
+-- Tabela de Clientes e Fornecedores
+CREATE TABLE IF NOT EXISTS public.clientes (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    codigo VARCHAR(50),
+    nome VARCHAR(120) NOT NULL,
+    nome_fantasia VARCHAR(60),
+    tipo_pessoa tipo_pessoa DEFAULT 'FISICA' NOT NULL,
+    cpf_cnpj VARCHAR(18) NOT NULL UNIQUE,
+    rg VARCHAR(20),
+    inscricao_estadual VARCHAR(20),
+    inscricao_municipal VARCHAR(20),
+    contribuinte contribuinte_icms DEFAULT 'NAO_INFORMADO' NOT NULL,
+    is_cliente BOOLEAN DEFAULT TRUE,
+    is_fornecedor BOOLEAN DEFAULT FALSE,
+    is_transportadora BOOLEAN DEFAULT FALSE,
+    logradouro VARCHAR(120),
+    numero VARCHAR(10),
+    complemento VARCHAR(60),
+    bairro VARCHAR(60),
+    cep VARCHAR(9),
+    cidade VARCHAR(60),
+    estado VARCHAR(2),
+    pais VARCHAR(50) DEFAULT 'Brasil',
+    cobranca_logradouro VARCHAR(120),
+    cobranca_numero VARCHAR(10),
+    cobranca_complemento VARCHAR(60),
+    cobranca_bairro VARCHAR(60),
+    cobranca_cep VARCHAR(9),
+    cobranca_cidade VARCHAR(60),
+    cobranca_estado VARCHAR(2),
+    telefone VARCHAR(15),
+    telefone_adicional VARCHAR(15),
+    celular VARCHAR(15),
+    email VARCHAR(100) NOT NULL,
+    email_nfe VARCHAR(100),
+    site VARCHAR(255),
+    estado_civil VARCHAR(20),
+    profissao VARCHAR(50),
+    sexo VARCHAR(15),
+    data_nascimento DATE,
+    naturalidade VARCHAR(50),
+    status_crm VARCHAR(50),
+    vendedor_id uuid,
+    condicao_pagamento_padrao_id uuid,
+    limite_credito NUMERIC(10, 2),
+    observacoes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.clientes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.clientes FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Vendedores
+CREATE TABLE IF NOT EXISTS public.vendedores (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+    nome VARCHAR(120) NOT NULL,
+    fantasia VARCHAR(60),
+    codigo VARCHAR(50),
+    tipo_pessoa tipo_pessoa_vendedor DEFAULT 'FISICA',
+    cpf_cnpj VARCHAR(18) NOT NULL,
+    contribuinte contribuinte_icms DEFAULT 'NAO_INFORMADO',
+    inscricao_estadual VARCHAR(20),
+    cep VARCHAR(9),
+    cidade VARCHAR(60),
+    uf VARCHAR(2),
+    logradouro VARCHAR(120),
+    bairro VARCHAR(60),
+    numero VARCHAR(10),
+    complemento VARCHAR(60),
+    telefone VARCHAR(15),
+    celular VARCHAR(15),
+    email VARCHAR(100) NOT NULL UNIQUE,
+    situacao situacao_vendedor DEFAULT 'ATIVO_COM_ACESSO',
+    deposito VARCHAR(50),
+    email_comunicacoes VARCHAR(100),
+    usuario_sistema VARCHAR(50),
+    regra_liberacao_comissao regra_comissao DEFAULT 'LIBERACAO_PARCIAL',
+    tipo_comissao tipo_comissao_vendedor DEFAULT 'FIXA',
+    aliquota_comissao NUMERIC(5, 2),
+    desconsiderar_comissao_linha_produto BOOLEAN DEFAULT FALSE,
+    observacoes TEXT,
+    ativo BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.vendedores ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.vendedores FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Produtos
+CREATE TABLE IF NOT EXISTS public.produtos (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    tipo_produto tipo_produto DEFAULT 'SIMPLES',
+    nome VARCHAR(120) NOT NULL,
+    codigo_barras VARCHAR(50),
+    codigo VARCHAR(50),
+    origem origem_produto DEFAULT 'NACIONAL',
+    unidade VARCHAR(10),
+    ncm VARCHAR(10),
+    cest VARCHAR(9),
+    preco_venda NUMERIC(10, 2) DEFAULT 0,
+    peso_liquido NUMERIC(10, 3),
+    peso_bruto NUMERIC(10, 3),
+    volumes INT,
+    largura NUMERIC(10, 2),
+    altura NUMERIC(10, 2),
+    comprimento NUMERIC(10, 2),
+    controlar_estoque BOOLEAN DEFAULT FALSE,
+    estoque_inicial INT,
+    estoque_minimo INT,
+    estoque_maximo INT,
+    controlar_lotes BOOLEAN DEFAULT FALSE,
+    localizacao VARCHAR(50),
+    dias_preparacao INT,
+    situacao situacao_produto DEFAULT 'ATIVO',
+    marca VARCHAR(50),
+    descricao_complementar TEXT,
+    link_video VARCHAR(255),
+    slug VARCHAR(255) UNIQUE,
+    keywords TEXT,
+    titulo_seo VARCHAR(255),
+    descricao_seo TEXT,
+    custo NUMERIC(10, 2),
+    garantia VARCHAR(50),
+    permitir_vendas BOOLEAN DEFAULT TRUE,
+    observacoes_produto TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.produtos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.produtos FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Serviços
+CREATE TABLE IF NOT EXISTS public.servicos (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    descricao VARCHAR(255) NOT NULL,
+    codigo VARCHAR(50),
+    preco NUMERIC(10, 2) DEFAULT 0,
+    unidade VARCHAR(10),
+    situacao situacao_produto DEFAULT 'ATIVO',
+    codigo_servico VARCHAR(50),
+    nbs VARCHAR(20),
+    descricao_complementar TEXT,
+    observacoes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.servicos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.servicos FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Embalagens
+CREATE TABLE IF NOT EXISTS public.embalagens (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    descricao VARCHAR(255) NOT NULL,
+    tipo tipo_embalagem DEFAULT 'CAIXA',
+    largura_cm NUMERIC(10, 2),
+    altura_cm NUMERIC(10, 2),
+    comprimento_cm NUMERIC(10, 2),
+    diametro_cm NUMERIC(10, 2),
+    peso_kg NUMERIC(10, 3) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.embalagens ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.embalagens FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Ordens de Serviço
+CREATE TABLE IF NOT EXISTS public.ordens_servico (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    numero VARCHAR(50) NOT NULL UNIQUE,
+    cliente_id uuid REFERENCES public.clientes(id),
+    vendedor_id uuid REFERENCES public.vendedores(id),
+    tecnico_id uuid REFERENCES public.vendedores(id),
+    descricao_servico TEXT,
+    consideracoes_finais TEXT,
+    data_inicio DATE NOT NULL,
+    data_previsao DATE,
+    hora TIME,
+    data_conclusao DATE,
+    total_servicos NUMERIC(10, 2) DEFAULT 0,
+    desconto VARCHAR(20),
+    observacoes_servico TEXT,
+    observacoes_internas TEXT,
+    orcar BOOLEAN DEFAULT FALSE,
+    forma_recebimento VARCHAR(50),
+    meio_pagamento VARCHAR(50),
+    conta_bancaria VARCHAR(50),
+    categoria_financeira VARCHAR(50),
+    condicao_pagamento VARCHAR(100),
+    marcadores TEXT[],
+    status status_os DEFAULT 'ABERTA',
+    prioridade prioridade_os DEFAULT 'MEDIA',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.ordens_servico ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.ordens_servico FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Itens da Ordem de Serviço
+CREATE TABLE IF NOT EXISTS public.ordem_servico_itens (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    ordem_servico_id uuid NOT NULL REFERENCES public.ordens_servico(id) ON DELETE CASCADE,
+    servico_id uuid REFERENCES public.servicos(id),
+    descricao VARCHAR(255) NOT NULL,
+    codigo VARCHAR(50),
+    quantidade NUMERIC(10, 2) NOT NULL,
+    preco NUMERIC(10, 2) NOT NULL,
+    desconto NUMERIC(5, 2),
+    valor_total NUMERIC(10, 2) NOT NULL,
+    orcar BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.ordem_servico_itens ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.ordem_servico_itens FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Pedidos de Venda
+CREATE TABLE IF NOT EXISTS public.pedidos_venda (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    numero VARCHAR(50) NOT NULL UNIQUE,
+    natureza_operacao VARCHAR(100),
+    cliente_id uuid REFERENCES public.clientes(id),
+    vendedor_id uuid REFERENCES public.vendedores(id),
+    endereco_entrega_diferente BOOLEAN DEFAULT FALSE,
+    total_produtos NUMERIC(10, 2) DEFAULT 0,
+    valor_ipi NUMERIC(10, 2),
+    valor_icms_st NUMERIC(10, 2),
+    desconto VARCHAR(20),
+    frete_cliente NUMERIC(10, 2),
+    frete_empresa NUMERIC(10, 2),
+    despesas NUMERIC(10, 2),
+    valor_total NUMERIC(10, 2) DEFAULT 0,
+    data_venda DATE NOT NULL,
+    data_prevista_entrega DATE,
+    data_envio TIMESTAMP,
+    data_maxima_despacho TIMESTAMP,
+    numero_pedido_ecommerce VARCHAR(50),
+    identificador_pedido_ecommerce VARCHAR(50),
+    numero_pedido_canal_venda VARCHAR(50),
+    intermediador VARCHAR(50),
+    forma_recebimento VARCHAR(50),
+    meio_pagamento VARCHAR(50),
+    conta_bancaria VARCHAR(50),
+    categoria_financeira VARCHAR(50),
+    condicao_pagamento VARCHAR(100),
+    forma_envio VARCHAR(50),
+    enviar_para_expedicao BOOLEAN DEFAULT TRUE,
+    deposito VARCHAR(50),
+    observacoes TEXT,
+    observacoes_internas TEXT,
+    marcadores TEXT[],
+    status status_pedido_venda DEFAULT 'ABERTO',
+    peso_bruto NUMERIC(10, 3),
+    peso_liquido NUMERIC(10, 3),
+    expedido BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.pedidos_venda ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.pedidos_venda FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Itens do Pedido de Venda
+CREATE TABLE IF NOT EXISTS public.pedido_venda_itens (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    pedido_id uuid NOT NULL REFERENCES public.pedidos_venda(id) ON DELETE CASCADE,
+    produto_id uuid REFERENCES public.produtos(id),
+    servico_id uuid REFERENCES public.servicos(id),
+    descricao VARCHAR(255) NOT NULL,
+    codigo VARCHAR(50),
+    unidade VARCHAR(10),
+    quantidade NUMERIC(10, 2) NOT NULL,
+    valor_unitario NUMERIC(10, 2) NOT NULL,
+    desconto_percentual NUMERIC(5, 2),
+    valor_total NUMERIC(10, 2) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.pedido_venda_itens ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.pedido_venda_itens FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Faturas de Venda
+CREATE TABLE IF NOT EXISTS public.faturas_venda (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    pedido_id uuid REFERENCES public.pedidos_venda(id),
+    numero_fatura VARCHAR(50) NOT NULL UNIQUE,
+    data_emissao DATE NOT NULL,
+    data_vencimento DATE NOT NULL,
+    valor_total NUMERIC(10, 2) NOT NULL,
+    status status_fatura DEFAULT 'EMITIDA',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.faturas_venda ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.faturas_venda FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Contas a Receber
+CREATE TABLE IF NOT EXISTS public.contas_receber (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    fatura_id uuid REFERENCES public.faturas_venda(id),
+    cliente_id uuid REFERENCES public.clientes(id),
+    contrato_id uuid,
+    descricao VARCHAR(255),
+    valor NUMERIC(10, 2) NOT NULL,
+    data_vencimento DATE NOT NULL,
+    data_pagamento DATE,
+    status status_conta_receber DEFAULT 'A_RECEBER',
+    ocorrencia ocorrencia_conta DEFAULT 'UNICA',
+    forma_recebimento VARCHAR(50),
+    numero_documento VARCHAR(50),
+    historico TEXT,
+    categoria_id uuid,
+    marcadores TEXT[],
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.contas_receber ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.contas_receber FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Contas a Pagar
+CREATE TABLE IF NOT EXISTS public.contas_pagar (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    descricao VARCHAR(255) NOT NULL,
+    valor NUMERIC(10, 2) NOT NULL,
+    data_vencimento DATE NOT NULL,
+    data_pagamento DATE,
+    status status_conta_pagar DEFAULT 'A_PAGAR',
+    fornecedor_id uuid REFERENCES public.clientes(id),
+    forma_pagamento VARCHAR(50),
+    numero_documento VARCHAR(50),
+    historico TEXT,
+    categoria_id uuid,
+    ocorrencia ocorrencia_conta DEFAULT 'UNICA',
+    competencia VARCHAR(7),
+    marcadores TEXT[],
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.contas_pagar ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.contas_pagar FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Fluxo de Caixa
+CREATE TABLE IF NOT EXISTS public.fluxo_caixa (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    data DATE NOT NULL,
+    descricao VARCHAR(255) NOT NULL,
+    valor NUMERIC(10, 2) NOT NULL,
+    tipo tipo_movimento_caixa NOT NULL,
+    conta_receber_id uuid REFERENCES public.contas_receber(id),
+    conta_pagar_id uuid REFERENCES public.contas_pagar(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.fluxo_caixa ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.fluxo_caixa FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Comissões
+CREATE TABLE IF NOT EXISTS public.comissoes (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    pedido_venda_id uuid NOT NULL REFERENCES public.pedidos_venda(id),
+    vendedor_id uuid NOT NULL REFERENCES public.vendedores(id),
+    base_comissao NUMERIC(10, 2) NOT NULL,
+    percentual_comissao NUMERIC(5, 2) NOT NULL,
+    valor_comissao NUMERIC(10, 2) NOT NULL,
+    status status_comissao DEFAULT 'PENDENTE',
+    data_pagamento DATE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.comissoes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.comissoes FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Contratos
+CREATE TABLE IF NOT EXISTS public.contratos (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    cliente_id uuid NOT NULL REFERENCES public.clientes(id),
+    descricao VARCHAR(255) NOT NULL,
+    situacao contrato_situacao DEFAULT 'ATIVO',
+    data_contrato DATE NOT NULL,
+    valor NUMERIC(10, 2) NOT NULL,
+    vencimento_regra contrato_vencimento_regra DEFAULT 'MES_CORRENTE',
+    dia_vencimento INT NOT NULL,
+    periodicidade contrato_periodicidade DEFAULT 'MENSAL',
+    categoria_id uuid,
+    forma_recebimento VARCHAR(50),
+    emitir_nf BOOLEAN DEFAULT FALSE,
+    dados_adicionais JSONB,
+    marcadores TEXT[],
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.contratos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.contratos FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Notas de Entrada
+CREATE TABLE IF NOT EXISTS public.notas_entrada (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    numero VARCHAR(50) NOT NULL UNIQUE,
+    fornecedor_id uuid REFERENCES public.clientes(id),
+    data_entrada DATE NOT NULL,
+    valor_total NUMERIC(10, 2) NOT NULL,
+    status status_nota_entrada DEFAULT 'EM_DIGITACAO',
+    observacoes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.notas_entrada ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.notas_entrada FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Itens da Nota de Entrada
+CREATE TABLE IF NOT EXISTS public.nota_entrada_itens (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    nota_entrada_id uuid NOT NULL REFERENCES public.notas_entrada(id) ON DELETE CASCADE,
+    produto_id uuid NOT NULL REFERENCES public.produtos(id),
+    descricao VARCHAR(255) NOT NULL,
+    quantidade NUMERIC(10, 2) NOT NULL,
+    valor_unitario NUMERIC(10, 2) NOT NULL,
+    valor_total NUMERIC(10, 2) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.nota_entrada_itens ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.nota_entrada_itens FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Movimentos de Estoque
+CREATE TABLE IF NOT EXISTS public.estoque_movimentos (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    produto_id uuid NOT NULL REFERENCES public.produtos(id),
+    tipo tipo_movimento_caixa NOT NULL,
+    quantidade INT NOT NULL,
+    data TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    origem VARCHAR(255),
+    observacao TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.estoque_movimentos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.estoque_movimentos FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Oportunidades do CRM
+CREATE TABLE IF NOT EXISTS public.crm_oportunidades (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    titulo VARCHAR(255) NOT NULL,
+    cliente_id uuid REFERENCES public.clientes(id),
+    vendedor_id uuid REFERENCES public.vendedores(id),
+    valor_estimado NUMERIC(10, 2),
+    etapa crm_etapa DEFAULT 'Lead',
+    data_fechamento_prevista DATE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.crm_oportunidades ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.crm_oportunidades FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Devoluções de Venda
+CREATE TABLE IF NOT EXISTS public.devolucoes_venda (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    numero VARCHAR(50) NOT NULL UNIQUE,
+    pedido_venda_id uuid REFERENCES public.pedidos_venda(id),
+    cliente_id uuid REFERENCES public.clientes(id),
+    data_devolucao DATE NOT NULL,
+    valor_total_devolvido NUMERIC(10, 2) NOT NULL,
+    observacoes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.devolucoes_venda ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.devolucoes_venda FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Itens da Devolução de Venda
+CREATE TABLE IF NOT EXISTS public.devolucao_venda_itens (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    devolucao_venda_id uuid NOT NULL REFERENCES public.devolucoes_venda(id) ON DELETE CASCADE,
+    pedido_venda_item_id uuid REFERENCES public.pedido_venda_itens(id),
+    produto_id uuid REFERENCES public.produtos(id),
+    servico_id uuid REFERENCES public.servicos(id),
+    descricao VARCHAR(255) NOT NULL,
+    quantidade INT NOT NULL,
+    valor_unitario NUMERIC(10, 2) NOT NULL,
+    valor_total NUMERIC(10, 2) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.devolucao_venda_itens ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.devolucao_venda_itens FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Expedições
+CREATE TABLE IF NOT EXISTS public.expedicoes (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    lote VARCHAR(50) NOT NULL UNIQUE,
+    forma_envio VARCHAR(50),
+    status status_expedicao DEFAULT 'AGUARDANDO_ENVIO',
+    data_criacao DATE NOT NULL,
+    data_envio DATE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.expedicoes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.expedicoes FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de ligação Expedição-Pedidos
+CREATE TABLE IF NOT EXISTS public.expedicao_pedidos (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    expedicao_id uuid NOT NULL REFERENCES public.expedicoes(id) ON DELETE CASCADE,
+    pedido_venda_id uuid NOT NULL REFERENCES public.pedidos_venda(id) ON DELETE CASCADE
+);
+ALTER TABLE public.expedicao_pedidos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.expedicao_pedidos FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Categorias Financeiras
+CREATE TABLE IF NOT EXISTS public.categorias_financeiras (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    descricao VARCHAR(100) NOT NULL,
+    tipo tipo_categoria_financeira NOT NULL,
+    ativo BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.categorias_financeiras ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.categorias_financeiras FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Formas de Pagamento
+CREATE TABLE IF NOT EXISTS public.formas_pagamento (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    descricao VARCHAR(100) NOT NULL,
+    ativo BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.formas_pagamento ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.formas_pagamento FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Permissões de Usuário
+CREATE TABLE IF NOT EXISTS public.user_permissions (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    permission TEXT NOT NULL,
+    UNIQUE(user_id, permission)
+);
+ALTER TABLE public.user_permissions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view their own permissions" ON public.user_permissions FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Admins can manage all permissions" ON public.user_permissions FOR ALL USING (true) WITH CHECK (true); -- Simplificado para MVP
+
+-- Tabela de Anexos (genérica, se necessário)
+CREATE TABLE IF NOT EXISTS public.anexos (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    entity_id uuid NOT NULL,
+    entity_type VARCHAR(50) NOT NULL,
+    nome_arquivo VARCHAR(255) NOT NULL,
+    path TEXT NOT NULL,
+    tamanho BIGINT NOT NULL,
+    tipo VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.anexos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.anexos FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Anexos para Produtos
+CREATE TABLE IF NOT EXISTS public.produto_imagens (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    produto_id uuid NOT NULL REFERENCES public.produtos(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    nome_arquivo VARCHAR(255),
+    tamanho BIGINT,
+    tipo VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.produto_imagens ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.produto_imagens FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Anexos para Clientes
+CREATE TABLE IF NOT EXISTS public.cliente_anexos (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    cliente_id uuid NOT NULL REFERENCES public.clientes(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    nome_arquivo VARCHAR(255),
+    tamanho BIGINT,
+    tipo VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.cliente_anexos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.cliente_anexos FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Anexos para Contratos
+CREATE TABLE IF NOT EXISTS public.contrato_anexos (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    contrato_id uuid NOT NULL REFERENCES public.contratos(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    nome_arquivo VARCHAR(255),
+    tamanho BIGINT,
+    tipo VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.contrato_anexos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.contrato_anexos FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Anexos para Contas a Pagar
+CREATE TABLE IF NOT EXISTS public.contas_pagar_anexos (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    conta_pagar_id uuid NOT NULL REFERENCES public.contas_pagar(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    nome_arquivo VARCHAR(255),
+    tamanho BIGINT,
+    tipo VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.contas_pagar_anexos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.contas_pagar_anexos FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Anexos para Contas a Receber
+CREATE TABLE IF NOT EXISTS public.contas_receber_anexos (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    conta_receber_id uuid NOT NULL REFERENCES public.contas_receber(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    nome_arquivo VARCHAR(255),
+    tamanho BIGINT,
+    tipo VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.contas_receber_anexos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.contas_receber_anexos FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Anúncios de Produtos
+CREATE TABLE IF NOT EXISTS public.produto_anuncios (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    produto_id uuid NOT NULL REFERENCES public.produtos(id) ON DELETE CASCADE,
+    ecommerce VARCHAR(100) NOT NULL,
+    identificador VARCHAR(255) NOT NULL,
+    descricao TEXT,
+    UNIQUE(produto_id, ecommerce, identificador)
+);
+ALTER TABLE public.produto_anuncios ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.produto_anuncios FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Fornecedores de Produtos
+CREATE TABLE IF NOT EXISTS public.produtos_fornecedores (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    produto_id uuid NOT NULL REFERENCES public.produtos(id) ON DELETE CASCADE,
+    fornecedor_id uuid NOT NULL REFERENCES public.clientes(id) ON DELETE CASCADE,
+    codigo_no_fornecedor VARCHAR(100),
+    UNIQUE(produto_id, fornecedor_id)
+);
+ALTER TABLE public.produtos_fornecedores ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.produtos_fornecedores FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Tabela de Pessoas de Contato
+CREATE TABLE IF NOT EXISTS public.pessoas_contato (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    cliente_id uuid NOT NULL REFERENCES public.clientes(id) ON DELETE CASCADE,
+    nome VARCHAR(100) NOT NULL,
+    setor VARCHAR(50),
+    email VARCHAR(100),
+    telefone VARCHAR(20),
+    ramal VARCHAR(10),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.pessoas_contato ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access for authenticated users" ON public.pessoas_contato FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Função para criar um vendedor quando um novo usuário se cadastra
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO public.vendedores (user_id, nome, email, cpf_cnpj)
+    VALUES (
+        new.id,
+        new.raw_user_meta_data->>'full_name',
+        new.email,
+        new.raw_user_meta_data->>'cpf_cnpj'
+    );
+    RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger para executar a função acima
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+
+-- Views
+CREATE OR REPLACE VIEW public.produtos_com_estoque AS
+SELECT
+    p.id,
+    p.nome,
+    p.codigo,
+    p.controlar_estoque,
+    p.estoque_minimo,
+    p.estoque_maximo,
+    p.unidade,
+    p.situacao,
+    (SELECT COALESCE(SUM(CASE WHEN m.tipo = 'ENTRADA' THEN m.quantidade ELSE -m.quantidade END), 0) FROM public.estoque_movimentos m WHERE m.produto_id = p.id) AS estoque_atual,
+    (
+        SELECT json_agg(json_build_object('id', pi.id, 'path', pi.path))
+        FROM public.produto_imagens pi
+        WHERE pi.produto_id = p.id
+    ) AS imagens
+FROM
+    public.produtos p;
+
+CREATE OR REPLACE VIEW public.comissoes_view AS
+SELECT
+    c.id,
+    c.pedido_venda_id,
+    c.vendedor_id,
+    v.nome AS vendedor_nome,
+    cl.nome AS cliente_nome,
+    pv.data_venda,
+    pv.valor_total AS valor_venda,
+    c.base_comissao,
+    c.percentual_comissao,
+    c.valor_comissao,
+    c.status,
+    c.data_pagamento
+FROM
+    public.comissoes c
+JOIN
+    public.vendedores v ON c.vendedor_id = v.id
+JOIN
+    public.pedidos_venda pv ON c.pedido_venda_id = pv.id
+JOIN
+    public.clientes cl ON pv.cliente_id = cl.id;
+
+CREATE OR REPLACE VIEW public.ordens_servico_view AS
+SELECT
+    os.id,
+    os.numero,
+    os.cliente_id,
+    c.nome AS cliente_nome,
+    c.email AS cliente_email,
+    os.vendedor_id,
+    v.nome AS vendedor_nome,
+    os.tecnico_id,
+    t.nome AS tecnico_nome,
+    os.descricao_servico,
+    os.data_inicio,
+    os.data_previsao,
+    os.total_servicos,
+    os.status,
+    os.prioridade,
+    os.created_at
+FROM
+    public.ordens_servico os
+LEFT JOIN
+    public.clientes c ON os.cliente_id = c.id
+LEFT JOIN
+    public.vendedores v ON os.vendedor_id = v.id
+LEFT JOIN
+    public.vendedores t ON os.tecnico_id = t.id;
+
+-- Funções RPC
+CREATE OR REPLACE FUNCTION public.get_dashboard_stats()
+RETURNS TABLE(
+    faturamento_total_mes_atual NUMERIC,
+    faturamento_total_mes_anterior NUMERIC,
+    novos_clientes_mes_atual INT,
+    novos_clientes_mes_anterior INT,
+    pedidos_realizados_mes_atual INT,
+    pedidos_realizados_mes_anterior INT
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        (SELECT COALESCE(SUM(valor), 0) FROM public.contas_receber WHERE status = 'RECEBIDO' AND date_trunc('month', data_pagamento) = date_trunc('month', CURRENT_DATE)) AS faturamento_total_mes_atual,
+        (SELECT COALESCE(SUM(valor), 0) FROM public.contas_receber WHERE status = 'RECEBIDO' AND date_trunc('month', data_pagamento) = date_trunc('month', CURRENT_DATE - INTERVAL '1 month')) AS faturamento_total_mes_anterior,
+        (SELECT COUNT(*)::INT FROM public.clientes WHERE date_trunc('month', created_at) = date_trunc('month', CURRENT_DATE)) AS novos_clientes_mes_atual,
+        (SELECT COUNT(*)::INT FROM public.clientes WHERE date_trunc('month', created_at) = date_trunc('month', CURRENT_DATE - INTERVAL '1 month')) AS novos_clientes_mes_anterior,
+        (SELECT COUNT(*)::INT FROM public.pedidos_venda WHERE date_trunc('month', data_venda) = date_trunc('month', CURRENT_DATE)) AS pedidos_realizados_mes_atual,
+        (SELECT COUNT(*)::INT FROM public.pedidos_venda WHERE date_trunc('month', data_venda) = date_trunc('month', CURRENT_DATE - INTERVAL '1 month')) AS pedidos_realizados_mes_anterior;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION public.get_faturamento_ultimos_12_meses()
+RETURNS TABLE(mes TEXT, faturamento NUMERIC) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        to_char(d.month, 'Mon/YY') AS mes,
+        COALESCE(SUM(cr.valor), 0) AS faturamento
+    FROM
+        generate_series(
+            date_trunc('month', CURRENT_DATE) - INTERVAL '11 months',
+            date_trunc('month', CURRENT_DATE),
+            '1 month'
+        ) AS d(month)
+    LEFT JOIN
+        public.contas_receber cr ON date_trunc('month', cr.data_pagamento) = d.month AND cr.status = 'RECEBIDO'
+    GROUP BY
+        d.month
+    ORDER BY
+        d.month;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION public.get_visao_cobrancas(p_ano INT, p_mes INT)
+RETURNS TABLE(
+    cliente_id uuid,
+    cliente_nome VARCHAR,
+    cliente_telefone VARCHAR,
+    valor_total NUMERIC,
+    contratos_count BIGINT,
+    data_vencimento DATE,
+    status_integracao TEXT
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        c.id AS cliente_id,
+        c.nome AS cliente_nome,
+        c.celular AS cliente_telefone,
+        SUM(ct.valor) AS valor_total,
+        COUNT(ct.id) AS contratos_count,
+        (make_date(p_ano, p_mes, 1) + (MIN(ct.dia_vencimento) - 1) * INTERVAL '1 day')::DATE AS data_vencimento,
+        'pendente'::TEXT AS status_integracao
+    FROM
+        public.contratos ct
+    JOIN
+        public.clientes c ON ct.cliente_id = c.id
+    WHERE
+        ct.situacao = 'ATIVO'
+    GROUP BY
+        c.id, c.nome, c.celular;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION public.get_contratos_para_faturar(p_ano INT, p_mes INT)
+RETURNS SETOF public.contratos AS $$
+BEGIN
+    RETURN QUERY
+    SELECT *
+    FROM public.contratos
+    WHERE situacao = 'ATIVO'
+    AND NOT EXISTS (
+        SELECT 1
+        FROM public.contas_receber cr
+        WHERE cr.contrato_id = contratos.id
+        AND EXTRACT(YEAR FROM cr.data_vencimento) = p_ano
+        AND EXTRACT(MONTH FROM cr.data_vencimento) = p_mes
+    );
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE VIEW public.dre_mensal AS
+WITH meses AS (
+    SELECT generate_series(
+        date_trunc('month', MIN(sub.data)) - INTERVAL '11 months',
+        date_trunc('month', MAX(sub.data)),
+        '1 month'
+    )::date AS mes
+    FROM (
+        SELECT data_pagamento AS data FROM public.contas_receber WHERE data_pagamento IS NOT NULL
+        UNION ALL
+        SELECT data_pagamento AS data FROM public.contas_pagar WHERE data_pagamento IS NOT NULL
+    ) AS sub
+),
+receitas AS (
+    SELECT
+        date_trunc('month', data_pagamento)::date AS mes,
+        SUM(valor) AS total
+    FROM public.contas_receber
+    WHERE status = 'RECEBIDO' AND data_pagamento IS NOT NULL
+    GROUP BY 1
+),
+despesas AS (
+    SELECT
+        date_trunc('month', data_pagamento)::date AS mes,
+        SUM(valor) AS total
+    FROM public.contas_pagar
+    WHERE status = 'PAGO' AND data_pagamento IS NOT NULL
+    GROUP BY 1
+)
+SELECT
+    EXTRACT(YEAR FROM m.mes)::integer AS ano,
+    EXTRACT(MONTH FROM m.mes)::integer AS mes,
+    to_char(m.mes, 'TMMon') AS mes_nome,
+    COALESCE(r.total, 0) AS receita,
+    COALESCE(d.total, 0) AS despesa,
+    COALESCE(r.total, 0) - COALESCE(d.total, 0) AS resultado
+FROM meses m
+LEFT JOIN receitas r ON m.mes = r.mes
+LEFT JOIN despesas d ON m.mes = d.mes
+ORDER BY m.mes;
+
+-- Habilita RLS em todas as tabelas no schema public
+DO $$
+DECLARE
+    tbl_name TEXT;
+BEGIN
+    FOR tbl_name IN
+        SELECT tablename
+        FROM pg_tables
+        WHERE schemaname = 'public'
+    LOOP
+        EXECUTE 'ALTER TABLE public.' || quote_ident(tbl_name) || ' ENABLE ROW LEVEL SECURITY;';
+    END LOOP;
+END;
+$$;
+
+-- Cria uma política padrão para permitir acesso total a usuários autenticados
+DO $$
+DECLARE
+    tbl_name TEXT;
+BEGIN
+    FOR tbl_name IN
+        SELECT tablename
+        FROM pg_tables
+        WHERE schemaname = 'public'
+    LOOP
+        -- Remove políticas existentes para evitar conflitos
+        EXECUTE 'DROP POLICY IF EXISTS "Enable access for authenticated users" ON public.' || quote_ident(tbl_name) || ';';
+        EXECUTE 'DROP POLICY IF EXISTS "Enable read access for all users" ON public.' || quote_ident(tbl_name) || ';';
+        EXECUTE 'DROP POLICY IF EXISTS "Enable insert for authenticated users" ON public.' || quote_ident(tbl_name) || ';';
+        EXECUTE 'DROP POLICY IF EXISTS "Enable update for authenticated users" ON public.' || quote_ident(tbl_name) || ';';
+        EXECUTE 'DROP POLICY IF EXISTS "Users can view their own permissions" ON public.' || quote_ident(tbl_name) || ';';
+        EXECUTE 'DROP POLICY IF EXISTS "Admins can manage all permissions" ON public.' || quote_ident(tbl_name) || ';';
+        
+        -- Cria a política padrão
+        EXECUTE 'CREATE POLICY "Enable access for authenticated users" ON public.' || quote_ident(tbl_name) || ' FOR ALL TO authenticated USING (true) WITH CHECK (true);';
+    END LOOP;
+END;
+$$;

@@ -1,0 +1,50 @@
+import React, { createContext, useState, useCallback, useContext, ReactNode } from 'react';
+import { Empresa } from '../types/empresa';
+
+interface ConfiguracoesContextType {
+  empresa: Empresa | null;
+  loading: boolean;
+  error: string | null;
+  loadEmpresa: () => Promise<void>;
+  saveEmpresa: (data: Partial<Empresa>, logoFile?: File | null) => Promise<void>;
+}
+
+const ConfiguracoesContext = createContext<ConfiguracoesContextType | undefined>(undefined);
+
+export const ConfiguracoesProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [empresa, setEmpresa] = useState<Empresa | null>(null);
+  // Define o estado de carregamento como `false` para não bloquear a aplicação.
+  const [loading, setLoading] = useState(false); 
+  const [error, setError] = useState<string | null>(null);
+
+  // Funções vazias para evitar chamadas ao backend no modo de reset.
+  const loadEmpresa = useCallback(async () => {
+    console.warn("[Modo de Reset] A busca por dados da empresa foi bloqueada.");
+  }, []);
+
+  const saveEmpresa = async (data: Partial<Empresa>, logoFile?: File | null) => {
+    console.warn("[Modo de Reset] O salvamento dos dados da empresa foi bloqueado.", data, logoFile);
+  };
+  
+  const value = {
+    empresa,
+    loading,
+    error,
+    loadEmpresa,
+    saveEmpresa,
+  };
+
+  return (
+    <ConfiguracoesContext.Provider value={value}>
+      {children}
+    </ConfiguracoesContext.Provider>
+  );
+};
+
+export const useConfiguracoes = () => {
+  const context = useContext(ConfiguracoesContext);
+  if (context === undefined) {
+    throw new Error('useConfiguracoes must be used within a ConfiguracoesProvider');
+  }
+  return context;
+};

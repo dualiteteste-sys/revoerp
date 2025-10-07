@@ -1,0 +1,85 @@
+import { BaseRepository } from './BaseRepository';
+		import { Empresa } from '../types/empresa';
+		import { camelToSnake, snakeToCamel } from '../lib/utils';
+		import { IConfiguracoesRepository } from './interfaces';
+
+		export class ConfiguracoesRepository extends BaseRepository<Empresa> implements IConfiguracoesRepository {
+		  constructor() {
+		    super('empresas');
+		  }
+
+		  protected createEntity(data: any): Empresa {
+		    return data as Empresa;
+		  }
+
+		  async findFirst(): Promise<Empresa | null> {
+		    const { data, error } = await this.supabase
+		      .from(this.tableName)
+		      .select(`
+		        *,
+		        substitutos_tributarios:empresa_substitutos_tributarios(*)
+		      `)
+		      .limit(1)
+		      .single();
+
+		    if (error && error.code !== 'PGRST116') { // Ignora erro de "nenhuma linha encontrada"
+		      this.handleError(error, 'findFirst');
+		    }
+
+		    return snakeToCamel(data) as Empresa | null;
+		  }
+
+		  async upsert(empresaData: Partial<Empresa>): Promise<Empresa> {
+		    const { substitutosTributarios, ...mainData } = empresaData;
+		    
+		    const { data: upsertedData, error } = await this.supabase
+		      .from(this.tableName)
+		      .upsert(camelToSnake(mainData))
+		      .select()
+		      .single();
+
+		    this.handleError(error, 'upsert');
+		    if (!upsertedData) throw new Error('Falha ao salvar dados da empresa.');
+
+		    const empresaId = upsertedData.id;
+
+		    // Sincroniza substitutos tributários
+		    const { error: deleteError } = await this.supabase
+		      .from('empresa_substitutos_tributarios')
+		      .delete()
+		      .eq('empresa_id', empresaId);
+		    this.handleError(deleteError, 'upsert (delete substitutos)');
+
+		    if (substitutosTributarios && substitutosTributarios.length > 0) {
+		      const substitutosParaInserir = substitutosTributarios.map(st => ({
+		        empresa_id: empresaId,
+		        uf: st.uf,
+		        ie: st.ie,
+		      }));
+		      const { error: insertError } = await this.supabase
+		        .from('empresa_substitutos_tributarios')
+		        .insert(substitutosParaInserir);
+		      this.handleError(insertError, 'upsert (insert substitutos)');
+		    }
+
+		    return (await this.findFirst())!;
+		  }
+
+		  async uploadLogo(file: File): Promise<string> {
+		    const filePath = `public/${Date.now()}-${file.name}`;
+		    const { error } = await this.supabase.storage
+		      .from('logos')
+		      .upload(filePath, file, {
+		        cacheControl: '3600',
+		        upsert: true,
+		      });
+
+		    if (error) {
+		      this.handleError(error, 'uploadLogo');
+		      throw new Error(error.message);
+		    }
+
+		    const { data } = this.supabase.storage.from('logos').getPublicUrl(filePath);
+		    return data.publicUrl;
+		  }
+		}

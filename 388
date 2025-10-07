@@ -1,0 +1,68 @@
+/*
+		# [Operação] Atualização de Políticas de Segurança para Clientes
+		[Descrição da operação]
+		Esta operação remove as políticas de segurança existentes nas tabelas `clientes`, `pessoas_contato` e `cliente_anexos` e as substitui por novas políticas que permitem acesso público completo (leitura e escrita) para todos os usuários, incluindo anônimos.
+
+		## Query Description: [Alerta de Segurança: Acesso Público Total
+		Esta operação tornará os dados da tabela de clientes publicamente acessíveis para leitura e modificação por qualquer pessoa que tenha a URL do seu projeto e a chave anônima. Isso é necessário para que o frontend funcione sem autenticação, mas representa um risco de segurança significativo. Recomenda-se reativar a autenticação e políticas de segurança mais restritivas assim que possível.]
+
+		## Metadata:
+		- Schema-Category: ["Dangerous"]
+		- Impact-Level: ["High"]
+		- Requires-Backup: [false]
+		- Reversible: [true]
+
+		## Structure Details:
+		- Tabela afetada: public.clientes
+		- Tabela afetada: public.pessoas_contato
+		- Tabela afetada: public.cliente_anexos
+
+		## Security Implications:
+		- RLS Status: [Enabled]
+		- Policy Changes: [Yes]
+		- Auth Requirements: [Nenhum (acesso público)]
+
+		## Performance Impact:
+		- Indexes: [Nenhum]
+		- Triggers: [Nenhum]
+		- Estimated Impact: [Baixo]
+		*/
+
+		-- Remove políticas antigas para evitar conflitos
+		DROP POLICY IF EXISTS "Permitir acesso total para usuários autenticados" ON public.clientes;
+		DROP POLICY IF EXISTS "Permitir acesso de leitura para todos" ON public.clientes;
+		DROP POLICY IF EXISTS "Permitir modificação para todos" ON public.clientes;
+		DROP POLICY IF EXISTS "Permitir acesso público total para testes" ON public.clientes;
+
+		DROP POLICY IF EXISTS "Permitir acesso total para usuários autenticados" ON public.pessoas_contato;
+		DROP POLICY IF EXISTS "Permitir acesso de leitura para todos em contatos" ON public.pessoas_contato;
+		DROP POLICY IF EXISTS "Permitir modificação para todos em contatos" ON public.pessoas_contato;
+		DROP POLICY IF EXISTS "Permitir acesso público total para testes em contatos" ON public.pessoas_contato;
+
+		DROP POLICY IF EXISTS "Permitir acesso total para usuários autenticados" ON public.cliente_anexos;
+		DROP POLICY IF EXISTS "Permitir acesso de leitura para todos em anexos" ON public.cliente_anexos;
+		DROP POLICY IF EXISTS "Permitir modificação para todos em anexos" ON public.cliente_anexos;
+		DROP POLICY IF EXISTS "Permitir acesso público total para testes em anexos" ON public.cliente_anexos;
+
+
+		-- Cria novas políticas públicas para permitir o CRUD sem autenticação
+		CREATE POLICY "Permitir acesso público total para testes"
+		ON public.clientes
+		FOR ALL
+		TO anon, authenticated
+		USING (true)
+		WITH CHECK (true);
+
+		CREATE POLICY "Permitir acesso público total para testes em contatos"
+		ON public.pessoas_contato
+		FOR ALL
+		TO anon, authenticated
+		USING (true)
+		WITH CHECK (true);
+
+		CREATE POLICY "Permitir acesso público total para testes em anexos"
+		ON public.cliente_anexos
+		FOR ALL
+		TO anon, authenticated
+		USING (true)
+		WITH CHECK (true);

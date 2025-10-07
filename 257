@@ -1,0 +1,43 @@
+import { BaseRepository } from './BaseRepository';
+		import { Contrato, ContratoAnexo } from '../types';
+		import { snakeToCamel, camelToSnake } from '../lib/utils';
+
+		export class ContratoRepository extends BaseRepository<Contrato> {
+		  constructor() {
+		    super('contratos');
+		  }
+
+		  protected createEntity(data: any): Contrato {
+		    return data as Contrato;
+		  }
+
+		  async findAll(options: { page?: number; pageSize?: number } = {}): Promise<{ data: Contrato[]; count: number }> {
+		    console.warn('[Modo de Construção] Chamada para ContratoRepository.findAll bloqueada.');
+		    return { data: [], count: 0 };
+		  }
+		  
+		  async findById(id: string): Promise<Contrato | null> {
+		    console.warn('[Modo de Construção] Chamada para ContratoRepository.findById bloqueada.');
+		    return null;
+		  }
+
+		  async create(data: Partial<Omit<Contrato, 'id' | 'createdAt' | 'updatedAt'>>): Promise<Contrato> {
+		    console.warn('[Modo de Construção] Chamada para ContratoRepository.create bloqueada.');
+		    throw new Error("Funcionalidade desativada durante a reconstrução.");
+		  }
+
+		  async update(id: string, updates: Partial<Contrato>): Promise<Contrato> {
+		    console.warn('[Modo de Construção] Chamada para ContratoRepository.update bloqueada.');
+		    throw new Error("Funcionalidade desativada durante a reconstrução.");
+		  }
+
+		  async uploadAnexo(contratoId: string, file: File): Promise<string> {
+		    console.warn('[Modo de Construção] Chamada para ContratoRepository.uploadAnexo bloqueada.');
+		    throw new Error("Funcionalidade desativada durante a reconstrução.");
+		  }
+
+		  async deleteAnexo(anexoId: string, filePath: string): Promise<void> {
+		    console.warn('[Modo de Construção] Chamada para ContratoRepository.deleteAnexo bloqueada.');
+		    throw new Error("Funcionalidade desativada durante a reconstrução.");
+		  }
+		}

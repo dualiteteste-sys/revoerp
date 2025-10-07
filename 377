@@ -1,0 +1,73 @@
+/*
+          # [Operation Name]
+          Reset Completo do Banco de Dados
+
+          ## Query Description: ["Este script remove todas as tabelas, funções, views e tipos de dados customizados do schema 'public', além de remover gatilhos específicos criados pela aplicação no schema 'auth'. É uma operação destrutiva projetada para limpar completamente o banco de dados e prepará-lo para uma nova estrutura, sem afetar a configuração de autenticação do Supabase. **Atenção: esta ação é irreversível e resultará na perda de todos os dados armazenados.**"]
+          
+          ## Metadata:
+          - Schema-Category: "Dangerous"
+          - Impact-Level: "High"
+          - Requires-Backup: true
+          - Reversible: false
+          
+          ## Structure Details:
+          - Tabelas Afetadas: Todas no schema 'public'.
+          - Funções Afetadas: Todas no schema 'public'.
+          - Views Afetadas: Todas no schema 'public'.
+          - Tipos Afetados: Todos os enums customizados no schema 'public'.
+          - Gatilhos Afetados: 'on_auth_user_created' no schema 'auth'.
+          
+          ## Security Implications:
+          - RLS Status: Todas as políticas RLS no schema 'public' serão removidas junto com as tabelas.
+          - Policy Changes: Yes
+          - Auth Requirements: N/A
+          
+          ## Performance Impact:
+          - Indexes: Todos os índices serão removidos.
+          - Triggers: O gatilho 'on_auth_user_created' será removido.
+          - Estimated Impact: "Alto impacto durante a execução, pois remove todos os objetos do banco. Após a execução, o banco estará vazio e performático."
+          */
+
+-- 1. Remover o gatilho que depende da função 'handle_new_user'
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+
+-- 2. Remover todas as funções e views
+DROP FUNCTION IF EXISTS public.handle_new_user();
+DROP VIEW IF EXISTS public.comissoes_view;
+DROP VIEW IF EXISTS public.ordens_servico_view;
+DROP VIEW IF EXISTS public.produtos_com_estoque;
+DROP VIEW IF EXISTS public.dre_mensal;
+DROP FUNCTION IF EXISTS public.get_dashboard_stats();
+DROP FUNCTION IF EXISTS public.get_faturamento_ultimos_12_meses();
+DROP FUNCTION IF EXISTS public.get_contratos_para_faturar(integer, integer);
+DROP FUNCTION IF EXISTS public.get_visao_cobrancas(p_ano integer, p_mes integer);
+
+-- 3. Desabilitar a segurança em nível de linha (RLS) para todas as tabelas antes de dropar
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+        EXECUTE 'ALTER TABLE public.' || quote_ident(r.tablename) || ' DISABLE ROW LEVEL SECURITY';
+    END LOOP;
+END $$;
+
+-- 4. Remover todas as tabelas do schema 'public'
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+        EXECUTE 'DROP TABLE IF EXISTS public.' || quote_ident(r.tablename) || ' CASCADE';
+    END LOOP;
+END $$;
+
+-- 5. Remover todos os enums (tipos customizados)
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (SELECT t.typname FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'public' AND t.typtype = 'e') LOOP
+        EXECUTE 'DROP TYPE IF EXISTS public.' || quote_ident(r.typname) || ' CASCADE';
+    END LOOP;
+END $$;

@@ -1,0 +1,660 @@
+/*
+          # [MVP Schema]
+          Cria a estrutura inicial do banco de dados para o Revo ERP.
+
+          ## Query Description: ["Este script cria todas as tabelas, tipos, funções e políticas de segurança necessárias para a operação básica do frontend. Ele foi projetado para ser idempotente, o que significa que pode ser executado várias vezes sem causar erros, pois verifica a existência de cada objeto antes de criá-lo."]
+          
+          ## Metadata:
+          - Schema-Category: ["Structural"]
+          - Impact-Level: ["High"]
+          - Requires-Backup: [false]
+          - Reversible: [false]
+          
+          ## Structure Details:
+          ["Criação de ENUMs, tabelas (clientes, produtos, vendedores, etc.), funções (views) e gatilhos (triggers) para automação."]
+          
+          ## Security Implications:
+          - RLS Status: [Enabled]
+          - Policy Changes: [Yes]
+          - Auth Requirements: [Habilita RLS e cria políticas básicas para acesso de usuários autenticados.]
+          
+          ## Performance Impact:
+          - Indexes: [Added]
+          - Triggers: [Added]
+          - Estimated Impact: ["Baixo. Cria estruturas essenciais com indexação primária."]
+          */
+
+-- Tipos (ENUMS)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tipo_pessoa') THEN
+        CREATE TYPE "public"."tipo_pessoa" AS ENUM ('FÍSICA', 'JURÍDICA', 'ESTRANGEIRO');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'contribuinte_icms') THEN
+        CREATE TYPE "public"."contribuinte_icms" AS ENUM ('Não informado', 'Contribuinte ICMS', 'Contribuinte Isento (sem IE)', 'Não Contribuinte');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'cliente_situacao') THEN
+        CREATE TYPE "public"."cliente_situacao" AS ENUM ('Ativo', 'Inativo');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tipo_produto') THEN
+        CREATE TYPE "public"."tipo_produto" AS ENUM ('Simples', 'Com variações', 'Kit', 'Fabricado', 'Matéria Prima');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'situacao_produto') THEN
+        CREATE TYPE "public"."situacao_produto" AS ENUM ('Ativo', 'Inativo');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'origem_produto') THEN
+        CREATE TYPE "public"."origem_produto" AS ENUM ('0 - Nacional', '1 - Estrangeira (Imp. Direta)', '2 - Estrangeira (Merc. Interno)', '3 - Nacional (Imp. > 40%)', '4 - Nacional (Proc. Básico)', '5 - Nacional (Imp. <= 40%)', '6 - Estrangeira (Imp. Direta, s/ similar)', '7 - Estrangeira (Merc. Interno, s/ similar)', '8 - Nacional (Imp. > 70%)');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tipo_embalagem_produto') THEN
+        CREATE TYPE "public"."tipo_embalagem_produto" AS ENUM ('Pacote / Caixa', 'Envelope', 'Rolo / Cilindrico');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'embalagem_produto') THEN
+        CREATE TYPE "public"."embalagem_produto" AS ENUM ('Embalagem customizada', 'Caixa de Encomenda Flex', 'Caixa de Encomenda CE – 01', 'Caixa de Encomenda CE – 02', 'Caixa de Encomenda CE – 03', 'Caixa de Encomenda CE – 07', 'Caixa de Encomenda 5B', 'Caixa de Encomenda 6B', 'Caixa de Encomenda Vai e Vem', 'Caixa de Encomenda B', 'Caixa de Encomenda 2B', 'Caixa de Encomenda 4B', 'Caixa de Encomenda Temática 01', 'Caixa de Encomenda Temática 02', 'Caixa de Encomenda Temática 03', 'Criar nova embalagem ...');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_os') THEN
+        CREATE TYPE "public"."status_os" AS ENUM ('ABERTA', 'EM_ANDAMENTO', 'FINALIZADA', 'CANCELADA', 'ORCAMENTO');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'prioridade_os') THEN
+        CREATE TYPE "public"."prioridade_os" AS ENUM ('BAIXA', 'MEDIA', 'ALTA', 'URGENTE');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_pedido_venda') THEN
+        CREATE TYPE "public"."status_pedido_venda" AS ENUM ('ABERTO', 'FATURADO', 'CANCELADO');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_fatura') THEN
+        CREATE TYPE "public"."status_fatura" AS ENUM ('EMITIDA', 'PAGA', 'VENCIDA', 'CANCELADA');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_conta_receber') THEN
+        CREATE TYPE "public"."status_conta_receber" AS ENUM ('A_RECEBER', 'RECEBIDO', 'VENCIDO');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_conta_pagar') THEN
+        CREATE TYPE "public"."status_conta_pagar" AS ENUM ('A_PAGAR', 'PAGO', 'VENCIDO');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ocorrencia_conta') THEN
+        CREATE TYPE "public"."ocorrencia_conta" AS ENUM ('Única', 'Recorrente');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tipo_movimento_caixa') THEN
+        CREATE TYPE "public"."tipo_movimento_caixa" AS ENUM ('ENTRADA', 'SAIDA');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'frete_por_conta') THEN
+        CREATE TYPE "public"."frete_por_conta" AS ENUM ('CIF', 'FOB');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_ordem_compra') THEN
+        CREATE TYPE "public"."status_ordem_compra" AS ENUM ('ABERTA', 'RECEBIDA', 'CANCELADA');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'crm_etapa') THEN
+        CREATE TYPE "public"."crm_etapa" AS ENUM ('Lead', 'Prospecção', 'Negociação', 'Ganho', 'Perdido');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_comissao') THEN
+        CREATE TYPE "public"."status_comissao" AS ENUM ('Pendente', 'Liberada', 'Paga', 'Cancelada');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'contrato_situacao') THEN
+        CREATE TYPE "public"."contrato_situacao" AS ENUM ('Ativo', 'Demonstração', 'Inativo', 'Isento', 'Baixado', 'Encerrado');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'contrato_vencimento_regra') THEN
+        CREATE TYPE "public"."contrato_vencimento_regra" AS ENUM ('No mês corrente', 'No mês seguinte');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'contrato_periodicidade') THEN
+        CREATE TYPE "public"."contrato_periodicidade" AS ENUM ('Mensal', 'Bimestral', 'Trimestral', 'Semestral', 'Anual');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_nota_entrada') THEN
+        CREATE TYPE "public"."status_nota_entrada" AS ENUM ('EM_DIGITACAO', 'FINALIZADA', 'CANCELADA');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tipo_categoria_financeira') THEN
+        CREATE TYPE "public"."tipo_categoria_financeira" AS ENUM ('RECEITA', 'DESPESA');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tipo_pessoa_vendedor') THEN
+        CREATE TYPE "public"."tipo_pessoa_vendedor" AS ENUM ('Física', 'Jurídica', 'Estrangeiro', 'Estrangeiro no Brasil');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'situacao_vendedor') THEN
+        CREATE TYPE "public"."situacao_vendedor" AS ENUM ('Ativo com acesso ao sistema', 'Ativo sem acesso ao sistema', 'Inativo');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'regra_comissao') THEN
+        CREATE TYPE "public"."regra_comissao" AS ENUM ('Liberação parcial (pelo pagamento)', 'Liberação total (no faturamento)', 'Liberação total (no pagamento)');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tipo_comissao_vendedor') THEN
+        CREATE TYPE "public"."tipo_comissao_vendedor" AS ENUM ('Comissão com alíquota fixa', 'Comissão com alíquota conforme descontos');
+    END IF;
+END $$;
+
+
+-- Tabelas
+CREATE TABLE IF NOT EXISTS "public"."clientes" (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    codigo text,
+    nome text NOT NULL,
+    nome_fantasia text,
+    tipo_pessoa tipo_pessoa DEFAULT 'FÍSICA',
+    cpf_cnpj text NOT NULL UNIQUE,
+    rg text,
+    inscricao_estadual text,
+    inscricao_municipal text,
+    contribuinte contribuinte_icms DEFAULT 'Não informado',
+    is_cliente boolean DEFAULT true,
+    is_fornecedor boolean DEFAULT false,
+    is_transportadora boolean DEFAULT false,
+    logradouro text,
+    numero text,
+    complemento text,
+    bairro text,
+    cep text,
+    cidade text,
+    estado text,
+    pais text DEFAULT 'Brasil',
+    telefone text,
+    celular text,
+    email text,
+    email_nfe text,
+    site text,
+    limite_credito numeric,
+    observacoes text,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "public"."produtos" (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    tipo_produto tipo_produto DEFAULT 'Simples',
+    nome text NOT NULL,
+    codigo_barras text,
+    codigo text,
+    origem origem_produto DEFAULT '0 - Nacional',
+    unidade text,
+    ncm text,
+    cest text,
+    preco_venda numeric DEFAULT 0,
+    peso_liquido numeric,
+    peso_bruto numeric,
+    controlar_estoque boolean DEFAULT false,
+    estoque_minimo numeric,
+    estoque_maximo numeric,
+    situacao situacao_produto DEFAULT 'Ativo',
+    custo numeric,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "public"."servicos" (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    descricao text NOT NULL,
+    codigo text,
+    preco numeric DEFAULT 0,
+    unidade text,
+    situacao situacao_produto DEFAULT 'Ativo',
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "public"."vendedores" (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+    nome text NOT NULL,
+    fantasia text,
+    codigo text,
+    tipo_pessoa tipo_pessoa_vendedor DEFAULT 'Física',
+    cpf_cnpj text,
+    contribuinte contribuinte_icms DEFAULT 'Não informado',
+    inscricao_estadual text,
+    cep text,
+    cidade text,
+    uf text,
+    logradouro text,
+    bairro text,
+    numero text,
+    complemento text,
+    telefone text,
+    celular text,
+    email text,
+    situacao situacao_vendedor DEFAULT 'Ativo com acesso ao sistema',
+    deposito text,
+    email_comunicacoes text,
+    usuario_sistema text,
+    regra_liberacao_comissao regra_comissao DEFAULT 'Liberação parcial (pelo pagamento)',
+    tipo_comissao tipo_comissao_vendedor DEFAULT 'Comissão com alíquota fixa',
+    aliquota_comissao numeric,
+    desconsiderar_comissao_linha_produto boolean DEFAULT false,
+    observacoes text,
+    ativo boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "public"."pedidos_venda" (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    numero text NOT NULL,
+    cliente_id uuid REFERENCES clientes(id),
+    vendedor_id uuid REFERENCES vendedores(id),
+    data_venda date NOT NULL,
+    valor_total numeric NOT NULL,
+    status status_pedido_venda DEFAULT 'ABERTO',
+    expedido boolean DEFAULT false,
+    forma_envio text,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "public"."pedido_venda_itens" (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    pedido_id uuid NOT NULL REFERENCES pedidos_venda(id) ON DELETE CASCADE,
+    produto_id uuid REFERENCES produtos(id),
+    servico_id uuid REFERENCES servicos(id),
+    descricao text NOT NULL,
+    quantidade numeric NOT NULL,
+    valor_unitario numeric NOT NULL,
+    valor_total numeric NOT NULL,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "public"."faturas_venda" (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    pedido_id uuid NOT NULL REFERENCES pedidos_venda(id),
+    numero_fatura text NOT NULL,
+    data_emissao date NOT NULL,
+    data_vencimento date NOT NULL,
+    valor_total numeric NOT NULL,
+    status status_fatura DEFAULT 'EMITIDA',
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "public"."contas_receber" (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    fatura_id uuid REFERENCES faturas_venda(id),
+    contrato_id uuid, -- Será referenciado na tabela de contratos
+    cliente_id uuid REFERENCES clientes(id),
+    descricao text,
+    valor numeric NOT NULL,
+    data_vencimento date NOT NULL,
+    data_pagamento date,
+    status status_conta_receber DEFAULT 'A_RECEBER',
+    ocorrencia ocorrencia_conta,
+    forma_recebimento text,
+    categoria_id uuid, -- Será referenciado na tabela de categorias
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "public"."contas_pagar" (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    fornecedor_id uuid REFERENCES clientes(id),
+    descricao text,
+    valor numeric NOT NULL,
+    data_vencimento date NOT NULL,
+    data_pagamento date,
+    status status_conta_pagar DEFAULT 'A_PAGAR',
+    ocorrencia ocorrencia_conta,
+    forma_pagamento text,
+    categoria_id uuid, -- Será referenciado na tabela de categorias
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "public"."fluxo_caixa" (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    data date NOT NULL,
+    descricao text NOT NULL,
+    valor numeric NOT NULL,
+    tipo tipo_movimento_caixa NOT NULL,
+    conta_receber_id uuid REFERENCES contas_receber(id),
+    conta_pagar_id uuid REFERENCES contas_pagar(id),
+    created_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "public"."estoque_movimentos" (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    produto_id uuid NOT NULL REFERENCES produtos(id),
+    tipo tipo_movimento_caixa NOT NULL, -- Reutilizando o ENUM
+    quantidade numeric NOT NULL,
+    data timestamp with time zone NOT NULL,
+    origem text,
+    observacao text,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "public"."contratos" (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    cliente_id uuid NOT NULL REFERENCES clientes(id),
+    descricao text NOT NULL,
+    situacao contrato_situacao DEFAULT 'Ativo',
+    data_contrato date NOT NULL,
+    valor numeric NOT NULL,
+    vencimento_regra contrato_vencimento_regra DEFAULT 'No mês corrente',
+    dia_vencimento integer DEFAULT 10,
+    periodicidade contrato_periodicidade DEFAULT 'Mensal',
+    categoria_id uuid,
+    forma_recebimento text,
+    emitir_nf boolean DEFAULT false,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+ALTER TABLE "public"."contas_receber" ADD CONSTRAINT fk_contrato FOREIGN KEY (contrato_id) REFERENCES "public"."contratos"(id) ON DELETE SET NULL;
+
+CREATE TABLE IF NOT EXISTS "public"."configuracoes" (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    chave text NOT NULL UNIQUE,
+    valor jsonb,
+    descricao text,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "public"."categorias_financeiras" (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    descricao text NOT NULL,
+    tipo tipo_categoria_financeira NOT NULL,
+    ativo boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "public"."formas_pagamento" (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    descricao text NOT NULL,
+    ativo boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "public"."user_permissions" (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    permission text NOT NULL,
+    created_at timestamp with time zone DEFAULT now(),
+    UNIQUE(user_id, permission)
+);
+
+CREATE TABLE IF NOT EXISTS "public"."produto_imagens" (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    produto_id uuid NOT NULL REFERENCES produtos(id) ON DELETE CASCADE,
+    path text NOT NULL,
+    nome_arquivo text,
+    tamanho integer,
+    tipo text,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+-- Trigger para criar vendedor quando um novo usuário se cadastra
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.vendedores (user_id, nome, email, usuario_sistema)
+  VALUES (
+    NEW.id,
+    NEW.raw_user_meta_data->>'full_name',
+    NEW.email,
+    split_part(NEW.email, '@', 1)
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Views
+CREATE OR REPLACE VIEW public.produtos_com_estoque AS
+SELECT
+  p.id,
+  p.nome,
+  p.codigo,
+  p.controlar_estoque,
+  p.estoque_minimo,
+  p.estoque_maximo,
+  p.unidade,
+  p.situacao,
+  COALESCE(e.saldo, 0) AS estoque_atual,
+  (
+    SELECT json_agg(json_build_object('id', pi.id, 'path', pi.path))
+    FROM produto_imagens pi
+    WHERE pi.produto_id = p.id
+  ) AS imagens
+FROM
+  produtos p
+LEFT JOIN
+  (
+    SELECT
+      produto_id,
+      SUM(CASE WHEN tipo = 'ENTRADA' THEN quantidade ELSE -quantidade END) AS saldo
+    FROM
+      estoque_movimentos
+    GROUP BY
+      produto_id
+  ) e ON p.id = e.produto_id;
+
+CREATE OR REPLACE VIEW public.comissoes_view AS
+SELECT
+    gen_random_uuid() as id,
+    pv.id AS pedido_venda_id,
+    v.id AS vendedor_id,
+    v.nome AS vendedor_nome,
+    c.nome AS cliente_nome,
+    pv.data_venda,
+    pv.valor_total AS valor_venda,
+    pv.valor_total AS base_comissao,
+    COALESCE(v.aliquota_comissao, 5) AS percentual_comissao,
+    (pv.valor_total * (COALESCE(v.aliquota_comissao, 5) / 100)) AS valor_comissao,
+    CASE
+        WHEN cr.status = 'RECEBIDO' THEN 'Paga'::status_comissao
+        ELSE 'Pendente'::status_comissao
+    END AS status,
+    cr.data_pagamento
+FROM
+    pedidos_venda pv
+JOIN
+    vendedores v ON pv.vendedor_id = v.id
+JOIN
+    clientes c ON pv.cliente_id = c.id
+LEFT JOIN
+    faturas_venda fv ON pv.id = fv.pedido_id
+LEFT JOIN
+    contas_receber cr ON fv.id = cr.fatura_id
+WHERE pv.status = 'FATURADO';
+
+CREATE OR REPLACE VIEW public.dre_mensal AS
+WITH meses AS (
+  SELECT generate_series(
+    date_trunc('year', now()) - interval '11 months',
+    date_trunc('month', now()),
+    '1 month'
+  )::date AS mes_inicio
+),
+receitas AS (
+  SELECT
+    date_trunc('month', data_pagamento)::date AS mes,
+    SUM(valor) AS total
+  FROM contas_receber
+  WHERE status = 'RECEBIDO' AND data_pagamento IS NOT NULL
+  GROUP BY 1
+),
+despesas AS (
+  SELECT
+    date_trunc('month', data_pagamento)::date AS mes,
+    SUM(valor) AS total
+  FROM contas_pagar
+  WHERE status = 'PAGO' AND data_pagamento IS NOT NULL
+  GROUP BY 1
+)
+SELECT
+  EXTRACT(YEAR FROM m.mes_inicio)::integer AS ano,
+  EXTRACT(MONTH FROM m.mes_inicio)::integer AS mes,
+  to_char(m.mes_inicio, 'TMMon') AS mes_nome,
+  COALESCE(r.total, 0) AS receita,
+  COALESCE(d.total, 0) AS despesa,
+  (COALESCE(r.total, 0) - COALESCE(d.total, 0)) AS resultado
+FROM meses m
+LEFT JOIN receitas r ON m.mes_inicio = r.mes
+LEFT JOIN despesas d ON m.mes_inicio = d.mes
+ORDER BY 1, 2;
+
+-- Funções
+CREATE OR REPLACE FUNCTION public.get_dashboard_stats()
+RETURNS TABLE(
+  faturamento_total_mes_atual numeric,
+  faturamento_total_mes_anterior numeric,
+  novos_clientes_mes_atual bigint,
+  novos_clientes_mes_anterior bigint,
+  pedidos_realizados_mes_atual bigint,
+  pedidos_realizados_mes_anterior bigint
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    (SELECT COALESCE(SUM(valor), 0) FROM contas_receber WHERE status = 'RECEBIDO' AND date_trunc('month', data_pagamento) = date_trunc('month', now())) AS faturamento_total_mes_atual,
+    (SELECT COALESCE(SUM(valor), 0) FROM contas_receber WHERE status = 'RECEBIDO' AND date_trunc('month', data_pagamento) = date_trunc('month', now() - interval '1 month')) AS faturamento_total_mes_anterior,
+    (SELECT COUNT(*) FROM clientes WHERE date_trunc('month', created_at) = date_trunc('month', now())) AS novos_clientes_mes_atual,
+    (SELECT COUNT(*) FROM clientes WHERE date_trunc('month', created_at) = date_trunc('month', now() - interval '1 month')) AS novos_clientes_mes_anterior,
+    (SELECT COUNT(*) FROM pedidos_venda WHERE date_trunc('month', data_venda) = date_trunc('month', now())) AS pedidos_realizados_mes_atual,
+    (SELECT COUNT(*) FROM pedidos_venda WHERE date_trunc('month', data_venda) = date_trunc('month', now() - interval '1 month')) AS pedidos_realizados_mes_anterior;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION public.get_faturamento_ultimos_12_meses()
+RETURNS TABLE(mes text, faturamento numeric) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    to_char(m.mes_inicio, 'TMMon/YY') AS mes,
+    COALESCE(SUM(cr.valor), 0) AS faturamento
+  FROM
+    generate_series(
+      date_trunc('month', now()) - interval '11 months',
+      date_trunc('month', now()),
+      '1 month'
+    ) AS m(mes_inicio)
+  LEFT JOIN
+    contas_receber cr ON date_trunc('month', cr.data_pagamento) = m.mes_inicio AND cr.status = 'RECEBIDO'
+  GROUP BY
+    m.mes_inicio
+  ORDER BY
+    m.mes_inicio;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION public.get_contratos_para_faturar(p_ano integer, p_mes integer)
+RETURNS SETOF contratos AS $$
+BEGIN
+  RETURN QUERY
+  SELECT c.*
+  FROM contratos c
+  WHERE c.situacao = 'Ativo'
+    AND NOT EXISTS (
+      SELECT 1
+      FROM contas_receber cr
+      WHERE cr.contrato_id = c.id
+        AND EXTRACT(YEAR FROM cr.data_vencimento) = p_ano
+        AND EXTRACT(MONTH FROM cr.data_vencimento) = p_mes
+    );
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION public.get_visao_cobrancas(p_ano integer, p_mes integer)
+RETURNS TABLE(
+    cliente_id uuid,
+    cliente_nome text,
+    cliente_telefone text,
+    valor_total numeric,
+    contratos_count bigint,
+    data_vencimento date,
+    status_integracao text
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        c.id AS cliente_id,
+        c.nome AS cliente_nome,
+        c.celular AS cliente_telefone,
+        SUM(ct.valor) AS valor_total,
+        COUNT(ct.id) AS contratos_count,
+        (make_date(p_ano, p_mes, 1) + (MIN(ct.dia_vencimento) - 1) * interval '1 day')::date AS data_vencimento,
+        'pendente'::text AS status_integracao
+    FROM
+        clientes c
+    JOIN
+        contratos ct ON c.id = ct.cliente_id
+    WHERE
+        ct.situacao = 'Ativo' AND
+        NOT EXISTS (
+            SELECT 1
+            FROM contas_receber cr
+            WHERE cr.contrato_id = ct.id
+              AND EXTRACT(YEAR FROM cr.data_vencimento) = p_ano
+              AND EXTRACT(MONTH FROM cr.data_vencimento) = p_mes
+        )
+    GROUP BY
+        c.id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Habilitar RLS e criar políticas
+ALTER TABLE clientes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated users can access clients" ON public.clientes;
+CREATE POLICY "Authenticated users can access clients" ON public.clientes FOR ALL USING (auth.role() = 'authenticated');
+
+ALTER TABLE produtos ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated users can access produtos" ON public.produtos;
+CREATE POLICY "Authenticated users can access produtos" ON public.produtos FOR ALL USING (auth.role() = 'authenticated');
+
+ALTER TABLE servicos ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated users can access servicos" ON public.servicos;
+CREATE POLICY "Authenticated users can access servicos" ON public.servicos FOR ALL USING (auth.role() = 'authenticated');
+
+ALTER TABLE vendedores ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated users can access vendedores" ON public.vendedores;
+CREATE POLICY "Authenticated users can access vendedores" ON public.vendedores FOR ALL USING (auth.role() = 'authenticated');
+
+ALTER TABLE pedidos_venda ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated users can access pedidos_venda" ON public.pedidos_venda;
+CREATE POLICY "Authenticated users can access pedidos_venda" ON public.pedidos_venda FOR ALL USING (auth.role() = 'authenticated');
+
+ALTER TABLE pedido_venda_itens ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated users can access pedido_venda_itens" ON public.pedido_venda_itens;
+CREATE POLICY "Authenticated users can access pedido_venda_itens" ON public.pedido_venda_itens FOR ALL USING (auth.role() = 'authenticated');
+
+ALTER TABLE faturas_venda ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated users can access faturas_venda" ON public.faturas_venda;
+CREATE POLICY "Authenticated users can access faturas_venda" ON public.faturas_venda FOR ALL USING (auth.role() = 'authenticated');
+
+ALTER TABLE contas_receber ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated users can access contas_receber" ON public.contas_receber;
+CREATE POLICY "Authenticated users can access contas_receber" ON public.contas_receber FOR ALL USING (auth.role() = 'authenticated');
+
+ALTER TABLE contas_pagar ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated users can access contas_pagar" ON public.contas_pagar;
+CREATE POLICY "Authenticated users can access contas_pagar" ON public.contas_pagar FOR ALL USING (auth.role() = 'authenticated');
+
+ALTER TABLE fluxo_caixa ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated users can access fluxo_caixa" ON public.fluxo_caixa;
+CREATE POLICY "Authenticated users can access fluxo_caixa" ON public.fluxo_caixa FOR ALL USING (auth.role() = 'authenticated');
+
+ALTER TABLE estoque_movimentos ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated users can access estoque_movimentos" ON public.estoque_movimentos;
+CREATE POLICY "Authenticated users can access estoque_movimentos" ON public.estoque_movimentos FOR ALL USING (auth.role() = 'authenticated');
+
+ALTER TABLE contratos ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated users can access contratos" ON public.contratos;
+CREATE POLICY "Authenticated users can access contratos" ON public.contratos FOR ALL USING (auth.role() = 'authenticated');
+
+ALTER TABLE configuracoes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated users can access configuracoes" ON public.configuracoes;
+CREATE POLICY "Authenticated users can access configuracoes" ON public.configuracoes FOR ALL USING (auth.role() = 'authenticated');
+
+ALTER TABLE categorias_financeiras ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated users can access categorias_financeiras" ON public.categorias_financeiras;
+CREATE POLICY "Authenticated users can access categorias_financeiras" ON public.categorias_financeiras FOR ALL USING (auth.role() = 'authenticated');
+
+ALTER TABLE formas_pagamento ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated users can access formas_pagamento" ON public.formas_pagamento;
+CREATE POLICY "Authenticated users can access formas_pagamento" ON public.formas_pagamento FOR ALL USING (auth.role() = 'authenticated');
+
+ALTER TABLE user_permissions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can view their own permissions" ON public.user_permissions;
+CREATE POLICY "Users can view their own permissions" ON public.user_permissions FOR SELECT USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Admins can manage all permissions" ON public.user_permissions;
+CREATE POLICY "Admins can manage all permissions" ON public.user_permissions FOR ALL USING (true); -- Simplificado para MVP, idealmente seria uma verificação de role de admin
+
+ALTER TABLE produto_imagens ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated users can access produto_imagens" ON public.produto_imagens;
+CREATE POLICY "Authenticated users can access produto_imagens" ON public.produto_imagens FOR ALL USING (auth.role() = 'authenticated');

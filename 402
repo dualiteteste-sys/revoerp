@@ -1,0 +1,12 @@
+import React from 'react';
+
+const Papeis: React.FC = () => {
+  return (
+    <div>
+      <h1>Gerenciamento de Papéis e Permissões</h1>
+      <p>Em breve, aqui você poderá criar, editar e excluir papéis (funções) e definir quais permissões cada um deles possui.</p>
+    </div>
+  );
+};
+
+export default Papeis;

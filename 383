@@ -1,0 +1,162 @@
+/*
+		          # [Operation Name]
+		          Criação das tabelas de Clientes e Vendedores
+
+		          ## Query Description: [Este script cria as tabelas 'vendedores' e 'clientes', junto com os tipos de dados (ENUMs) necessários para seus campos. Ele foi projetado para ser executado com segurança, verificando se os objetos já existem antes de criá-los para evitar erros de duplicidade.]
+		          
+		          ## Metadata:
+		          - Schema-Category: ["Structural"]
+		          - Impact-Level: ["Low"]
+		          - Requires-Backup: [false]
+		          - Reversible: [false]
+		          
+		          ## Structure Details:
+		          - Cria os ENUMs: 'tipo_pessoa_vendedor', 'situacao_vendedor', 'regra_comissao', 'tipo_comissao_vendedor', 'contribuinte_icms', 'tipo_pessoa', 'cliente_situacao'.
+		          - Cria a tabela 'vendedores' com suas colunas e restrições.
+		          - Cria a tabela 'clientes' com suas colunas e uma chave estrangeira para 'vendedores'.
+		          - Habilita RLS e cria políticas de acesso para ambas as tabelas.
+		          
+		          ## Security Implications:
+		          - RLS Status: [Enabled]
+		          - Policy Changes: [Yes]
+		          - Auth Requirements: [Usuário autenticado]
+		          
+		          ## Performance Impact:
+		          - Indexes: [Primary Keys]
+		          - Triggers: [No]
+		          - Estimated Impact: [Baixo]
+		          */
+
+		-- Criação dos ENUMs se não existirem
+		DO $$
+		BEGIN
+		    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tipo_pessoa_vendedor') THEN
+		        CREATE TYPE tipo_pessoa_vendedor AS ENUM ('Física', 'Jurídica', 'Estrangeiro', 'Estrangeiro no Brasil');
+		    END IF;
+		    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'situacao_vendedor') THEN
+		        CREATE TYPE situacao_vendedor AS ENUM ('Ativo com acesso ao sistema', 'Ativo sem acesso ao sistema', 'Inativo');
+		    END IF;
+		    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'regra_comissao') THEN
+		        CREATE TYPE regra_comissao AS ENUM ('Liberação parcial (pelo pagamento)', 'Liberação total (no faturamento)', 'Liberação total (no pagamento)');
+		    END IF;
+		    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tipo_comissao_vendedor') THEN
+		        CREATE TYPE tipo_comissao_vendedor AS ENUM ('Comissão com alíquota fixa', 'Comissão com alíquota conforme descontos');
+		    END IF;
+		    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'contribuinte_icms') THEN
+		        CREATE TYPE contribuinte_icms AS ENUM ('1 - Contribuinte ICMS', '2 - Contribuinte isento de Inscrição no cadastro de Contribuintes do ICMS', '9 - Não Contribuinte, que pode ou não possuir Inscrição Estadual no Cadastro de Contribuintes do ICMS');
+		    END IF;
+		    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tipo_pessoa') THEN
+		        CREATE TYPE tipo_pessoa AS ENUM ('FISICA', 'JURIDICA', 'ESTRANGEIRO');
+		    END IF;
+		    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'cliente_situacao') THEN
+		        CREATE TYPE cliente_situacao AS ENUM ('Ativo', 'Inativo');
+		    END IF;
+		END
+		$$;
+
+		-- Criação da tabela de Vendedores se não existir
+		CREATE TABLE IF NOT EXISTS public.vendedores (
+		    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+		    user_id uuid REFERENCES auth.users(id),
+		    nome text NOT NULL,
+		    fantasia text,
+		    codigo text,
+		    tipo_pessoa tipo_pessoa_vendedor DEFAULT 'Física',
+		    cpf_cnpj text NOT NULL,
+		    contribuinte contribuinte_icms DEFAULT '9 - Não Contribuinte, que pode ou não possuir Inscrição Estadual no Cadastro de Contribuintes do ICMS',
+		    inscricao_estadual text,
+		    cep text,
+		    cidade text,
+		    uf text,
+		    logradouro text,
+		    bairro text,
+		    numero text,
+		    complemento text,
+		    telefone text,
+		    celular text,
+		    email text NOT NULL,
+		    situacao situacao_vendedor DEFAULT 'Ativo com acesso ao sistema',
+		    deposito text,
+		    email_comunicacoes text,
+		    usuario_sistema text,
+		    regra_liberacao_comissao regra_comissao DEFAULT 'Liberação parcial (pelo pagamento)',
+		    tipo_comissao tipo_comissao_vendedor DEFAULT 'Comissão com alíquota fixa',
+		    aliquota_comissao numeric,
+		    desconsiderar_comissao_linha_produto boolean DEFAULT false,
+		    observacoes text,
+		    ativo boolean DEFAULT true,
+		    created_at timestamp with time zone DEFAULT now(),
+		    updated_at timestamp with time zone DEFAULT now()
+		);
+
+		-- Criação da tabela de Clientes se não existir
+		CREATE TABLE IF NOT EXISTS public.clientes (
+		    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+		    codigo text,
+		    nome text NOT NULL,
+		    nome_fantasia text,
+		    tipo_pessoa tipo_pessoa NOT NULL DEFAULT 'FISICA',
+		    cpf_cnpj text NOT NULL,
+		    rg text,
+		    inscricao_estadual text,
+		    inscricao_municipal text,
+		    contribuinte_icms contribuinte_icms NOT NULL DEFAULT '9 - Não Contribuinte, que pode ou não possuir Inscrição Estadual no Cadastro de Contribuintes do ICMS',
+		    is_cliente boolean DEFAULT true,
+		    is_fornecedor boolean DEFAULT false,
+		    is_transportadora boolean DEFAULT false,
+		    logradouro text,
+		    numero text,
+		    complemento text,
+		    bairro text,
+		    cep text,
+		    cidade text,
+		    estado text,
+		    pais text DEFAULT 'Brasil',
+		    cobranca_logradouro text,
+		    cobranca_numero text,
+		    cobranca_complemento text,
+		    cobranca_bairro text,
+		    cobranca_cep text,
+		    cobranca_cidade text,
+		    cobranca_estado text,
+		    telefone text,
+		    telefone_adicional text,
+		    celular text,
+		    email text NOT NULL,
+		    email_nfe text,
+		    site text,
+		    estado_civil text,
+		    profissao text,
+		    sexo text,
+		    data_nascimento date,
+		    naturalidade text,
+		    status_crm text,
+		    vendedor_id uuid REFERENCES public.vendedores(id),
+		    condicao_pagamento_padrao_id text,
+		    limite_credito numeric,
+		    observacoes text,
+		    prazo_medio_entrega_dias integer,
+		    categoria_despesa_padrao_id text,
+		    placa_veiculo text,
+		    uf_placa text,
+		    registro_antt text,
+		    observacoes_frete text,
+		    situacao_cliente cliente_situacao DEFAULT 'Ativo',
+		    tabela_preco_padrao_id text,
+		    created_at timestamp with time zone DEFAULT now(),
+		    updated_at timestamp with time zone DEFAULT now()
+		);
+
+		-- Habilita RLS e cria políticas
+		ALTER TABLE public.vendedores ENABLE ROW LEVEL SECURITY;
+		ALTER TABLE public.clientes ENABLE ROW LEVEL SECURITY;
+
+		DROP POLICY IF EXISTS "Allow authenticated users to read" ON public.vendedores;
+		CREATE POLICY "Allow authenticated users to read" ON public.vendedores FOR SELECT TO authenticated USING (true);
+		DROP POLICY IF EXISTS "Allow authenticated users to manage their data" ON public.vendedores;
+		CREATE POLICY "Allow authenticated users to manage their data" ON public.vendedores FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+		DROP POLICY IF EXISTS "Allow authenticated users to read" ON public.clientes;
+		CREATE POLICY "Allow authenticated users to read" ON public.clientes FOR SELECT TO authenticated USING (true);
+		DROP POLICY IF EXISTS "Allow authenticated users to manage their data" ON public.clientes;
+		CREATE POLICY "Allow authenticated users to manage their data" ON public.clientes FOR ALL TO authenticated USING (true) WITH CHECK (true);

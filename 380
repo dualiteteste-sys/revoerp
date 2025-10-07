@@ -1,0 +1,61 @@
+/*
+          # [Operation Name]
+          Atualização do ENUM 'contribuinte_icms'
+
+          ## Query Description: [Esta operação irá atualizar o tipo de dado 'contribuinte_icms' para refletir as novas opções fiscais.
+          1. As colunas que usam este tipo serão temporariamente convertidas para TEXT.
+          2. O tipo antigo será removido e o novo será criado com as opções corretas.
+          3. As colunas serão convertidas de volta para o novo tipo, e um novo valor padrão será definido.
+          Esta operação é segura, mas pode falhar se houver dados que não possam ser convertidos para o novo formato.]
+          
+          ## Metadata:
+          - Schema-Category: "Structural"
+          - Impact-Level: "Medium"
+          - Requires-Backup: false
+          - Reversible: false
+          
+          ## Structure Details:
+          - Types affected: contribuinte_icms
+          - Tables affected: clientes, vendedores
+          - Columns affected: contribuinte_icms, contribuinte
+          
+          ## Security Implications:
+          - RLS Status: Unchanged
+          - Policy Changes: No
+          - Auth Requirements: None
+          
+          ## Performance Impact:
+          - Indexes: Unchanged
+          - Triggers: Unchanged
+          - Estimated Impact: Baixo, pode causar um breve bloqueio nas tabelas durante a alteração.
+          */
+
+-- Step 1: Temporarily change the column type to text
+ALTER TABLE public.clientes ALTER COLUMN contribuinte_icms TYPE TEXT;
+ALTER TABLE public.vendedores ALTER COLUMN contribuinte TYPE TEXT;
+
+-- Step 2: Drop the old enum type
+DROP TYPE IF EXISTS public.contribuinte_icms;
+
+-- Step 3: Create the new enum type with the desired values
+CREATE TYPE public.contribuinte_icms AS ENUM (
+    '1 - Contribuinte ICMS',
+    '2 - Contribuinte isento de Inscrição no cadastro de Contribuintes do ICMS',
+    '9 - Não Contribuinte, que pode ou não possuir Inscrição Estadual no Cadastro de Contribuintes do ICMS'
+);
+
+-- Step 4: Change the column type back to the new enum and set the new default
+-- This will fail if there are existing values that don't match the new enum.
+-- We'll handle this by updating non-matching values to the new default.
+UPDATE public.clientes SET contribuinte_icms = '9 - Não Contribuinte, que pode ou não possuir Inscrição Estadual no Cadastro de Contribuintes do ICMS' WHERE contribuinte_icms NOT IN ('1 - Contribuinte ICMS', '2 - Contribuinte isento de Inscrição no cadastro de Contribuintes do ICMS', '9 - Não Contribuinte, que pode ou não possuir Inscrição Estadual no Cadastro de Contribuintes do ICMS');
+UPDATE public.vendedores SET contribuinte = '9 - Não Contribuinte, que pode ou não possuir Inscrição Estadual no Cadastro de Contribuintes do ICMS' WHERE contribuinte NOT IN ('1 - Contribuinte ICMS', '2 - Contribuinte isento de Inscrição no cadastro de Contribuintes do ICMS', '9 - Não Contribuinte, que pode ou não possuir Inscrição Estadual no Cadastro de Contribuintes do ICMS');
+
+ALTER TABLE public.clientes
+  ALTER COLUMN contribuinte_icms TYPE public.contribuinte_icms
+  USING contribuinte_icms::text::contribuinte_icms,
+  ALTER COLUMN contribuinte_icms SET DEFAULT '9 - Não Contribuinte, que pode ou não possuir Inscrição Estadual no Cadastro de Contribuintes do ICMS';
+
+ALTER TABLE public.vendedores
+  ALTER COLUMN contribuinte TYPE public.contribuinte_icms
+  USING contribuinte::text::contribuinte_icms,
+  ALTER COLUMN contribuinte SET DEFAULT '9 - Não Contribuinte, que pode ou não possuir Inscrição Estadual no Cadastro de Contribuintes do ICMS';

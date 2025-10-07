@@ -1,0 +1,128 @@
+import React, { useState, useEffect, useCallback } from 'react';
+		import { useForm } from 'react-hook-form';
+		import { zodResolver } from '@hookform/resolvers/zod';
+		import axios from 'axios';
+		import { GlassCard } from '../../components/ui/GlassCard';
+		import { GlassButton } from '../../components/ui/GlassButton';
+		import { Loader2, Save } from 'lucide-react';
+		import toast from 'react-hot-toast';
+		import { useConfiguracoes } from '../../contexts/ConfiguracoesContext';
+		import { DadosEmpresaSection } from '../../components/settings/dados-empresa/DadosEmpresaSection';
+		import { EnderecoSection } from '../../components/settings/dados-empresa/EnderecoSection';
+		import { ContatoSection } from '../../components/settings/dados-empresa/ContatoSection';
+		import { RegimeSection } from '../../components/settings/dados-empresa/RegimeSection';
+		import { InscricoesEstaduaisSection } from '../../components/settings/dados-empresa/InscricoesEstaduaisSection';
+		import { PreferenciasContatoSection } from '../../components/settings/dados-empresa/PreferenciasContatoSection';
+		import { AdministradorSection } from '../../components/settings/dados-empresa/AdministradorSection';
+		import { LogoSection } from '../../components/settings/dados-empresa/LogoSection';
+		import { dadosEmpresaSchema, DadosEmpresaFormData } from '../../schemas/dadosEmpresaSchema';
+
+		export const DadosEmpresa: React.FC = () => {
+		    const { empresa, saveEmpresa, loading: loadingContext } = useConfiguracoes();
+		    const [isSaving, setIsSaving] = useState(false);
+		    const [logoFile, setLogoFile] = useState<File | null>(null);
+
+		    const form = useForm<DadosEmpresaFormData>({
+		        resolver: zodResolver(dadosEmpresaSchema),
+		        defaultValues: {},
+		    });
+
+		    const { control, handleSubmit, reset, watch, setValue } = form;
+		    const logoPreview = watch('logoUrl');
+		    const cnpjValue = watch('regime.cnpj');
+
+		    useEffect(() => {
+		        if (empresa) {
+		            reset(empresa);
+		        }
+		    }, [empresa, reset]);
+
+		    const handleBuscaCnpj = useCallback(async () => {
+		        if (!cnpjValue) return;
+		        const cleanCnpj = cnpjValue.replace(/\D/g, '');
+		        if (cleanCnpj.length !== 14) return;
+
+		        const toastId = toast.loading('Buscando dados do CNPJ...');
+		        try {
+		            const { data } = await axios.get(`https://brasilapi.com.br/api/cnpj/v1/${cleanCnpj}`);
+		            setValue('razaoSocial', data.razao_social);
+		            setValue('fantasia', data.nome_fantasia);
+		            setValue('endereco.cep', data.cep);
+		            setValue('endereco.logradouro', data.logradouro);
+		            setValue('endereco.numero', data.numero);
+		            setValue('endereco.complemento', data.complemento);
+		            setValue('endereco.bairro', data.bairro);
+		            setValue('endereco.cidade', data.municipio);
+		            setValue('endereco.uf', data.uf);
+		            setValue('regime.cnae', data.cnae_fiscal);
+		            setValue('contato.email', data.email);
+		            setValue('contato.fone', data.ddd_telefone_1);
+		            toast.success('Dados preenchidos com sucesso!', { id: toastId });
+		        } catch (error) {
+		            toast.error('Falha ao buscar dados do CNPJ.', { id: toastId });
+		        }
+		    }, [cnpjValue, setValue]);
+
+		    const onSubmit = async (data: DadosEmpresaFormData) => {
+		        setIsSaving(true);
+		        await saveEmpresa({ ...empresa, ...data }, logoFile);
+		        setIsSaving(false);
+		    };
+
+		    const handleCancel = () => {
+		        if (empresa) reset(empresa);
+		        setLogoFile(null);
+		        toast('Alterações descartadas.');
+		    };
+
+		    const onDrop = useCallback((acceptedFiles: File[]) => {
+		        const file = acceptedFiles[0];
+		        if (file) {
+		            if (file.size > 2 * 1024 * 1024) {
+		                toast.error("Arquivo inválido: Máx. 2 MB.");
+		                return;
+		            }
+		            if (!['image/png', 'image/jpeg', 'image/svg+xml'].includes(file.type)) {
+		                toast.error("Arquivo inválido: PNG/JPG/SVG permitidos.");
+		                return;
+		            }
+		            setLogoFile(file);
+		            const previewUrl = URL.createObjectURL(file);
+		            setValue('logoUrl', previewUrl, { shouldValidate: true });
+		        }
+		    }, [setValue]);
+
+		    const removeLogo = () => {
+		        setLogoFile(null);
+		        setValue('logoUrl', null, { shouldValidate: true });
+		    };
+
+		    if (loadingContext && !empresa) {
+		        return <div className="flex items-center justify-center h-full w-full"><Loader2 className="animate-spin text-blue-500" size={48} /></div>;
+		    }
+
+		    return (
+		        <GlassCard>
+		            <form onSubmit={handleSubmit(onSubmit)} className="space-y-12">
+		                <DadosEmpresaSection control={control} />
+		                <EnderecoSection control={control} />
+		                <ContatoSection control={control} />
+		                <RegimeSection control={control} watch={watch} onCnpjBlur={handleBuscaCnpj} />
+		                <InscricoesEstaduaisSection control={control} />
+		                <PreferenciasContatoSection control={control} />
+		                <AdministradorSection control={control} />
+		                <LogoSection logoPreview={logoPreview} onDrop={onDrop} onRemove={removeLogo} />
+
+		                <div className="flex justify-end mt-8 pt-6 border-t border-white/30 gap-4">
+		                    <GlassButton type="button" variant="secondary" onClick={handleCancel} disabled={isSaving}>Cancelar</GlassButton>
+		                    <GlassButton type="submit" disabled={isSaving || loadingContext}>
+		                        {isSaving ? <Loader2 className="animate-spin" /> : <Save />}
+		                        {isSaving ? 'Salvando...' : 'Salvar'}
+		                    </GlassButton>
+		                </div>
+		            </form>
+		        </GlassCard>
+		    );
+		};
+
+		export default DadosEmpresa;

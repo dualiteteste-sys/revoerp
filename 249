@@ -1,0 +1,84 @@
+import { IRepository, IEntity } from '../types';
+import { supabase } from '../lib/supabaseClient';
+import { PostgrestError } from '@supabase/supabase-js';
+import { snakeToCamel, camelToSnake } from '../lib/utils';
+import { RepositoryError } from './RepositoryError';
+
+export abstract class BaseRepository<T extends IEntity> implements IRepository<T> {
+  protected supabase = supabase;
+  protected tableName: string;
+  constructor(tableName: string) {
+    this.tableName = tableName;
+  }
+  protected handleError(error: PostgrestError | null, context?: string): void {
+    if (error) {
+      console.error(`Error in ${this.tableName} repository${context ? ` (${context})` : ''}:`, error);
+      throw new RepositoryError(error.message, context, {
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      });
+    }
+  }
+  async findAll(
+    options: { page?: number; pageSize?: number } = {},
+    select: string = '*'
+  ): Promise<{ data: T[]; count: number }> {
+    const { page = 1, pageSize = 10 } = options;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    const { data, error, count } = await this.supabase
+      .from(this.tableName)
+      .select(select, { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    this.handleError(error, `findAll with select: ${select}`);
+    return {
+      data: (snakeToCamel(data || []) as T[]),
+      count: count || 0,
+    };
+  }
+  async findById(id: string): Promise<T | null> {
+    const { data, error } = await this.supabase
+      .from(this.tableName)
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error && error.code !== 'PGRST116') { // PGRST116: "exact-one" row not found
+      this.handleError(error, 'findById');
+    }
+    return snakeToCamel(data) as T | null;
+  }
+  async create(entity: Omit<T, 'id' | 'createdAt' | 'updatedAt'>): Promise<T> {
+    const entityToInsert = camelToSnake(entity);
+    const { data, error } = await this.supabase
+      .from(this.tableName)
+      .insert(entityToInsert)
+      .select()
+      .single();
+    this.handleError(error, 'create');
+    if (!data) throw new Error('Falha ao criar, nenhum dado retornado.');
+    return snakeToCamel(data) as T;
+  }
+  async update(id: string, updates: Partial<T>): Promise<T> {
+    const { id: entityId, createdAt, updatedAt, ...restOfUpdates } = updates;
+    const updatesToApply = camelToSnake({ ...restOfUpdates, updated_at: new Date() });
+    const { data, error } = await this.supabase
+      .from(this.tableName)
+      .update(updatesToApply)
+      .eq('id', id)
+      .select()
+      .single();
+    this.handleError(error, 'update');
+    if (!data) throw new Error('Falha ao atualizar, nenhum dado retornado.');
+    return snakeToCamel(data) as T;
+  }
+  async delete(id: string): Promise<void> {
+    const { error } = await this.supabase
+      .from(this.tableName)
+      .delete()
+      .eq('id', id);
+    this.handleError(error, 'delete');
+  }
+  protected abstract createEntity(data: Omit<T, 'id' | 'createdAt' | 'updatedAt'>): T;
+}

@@ -1,0 +1,100 @@
+/*
+# [Function] get_dashboard_stats
+Cria a função para calcular estatísticas do dashboard.
+
+## Query Description:
+Esta operação cria uma nova função no banco de dados chamada `get_dashboard_stats`. A função não modifica dados existentes и é segura para ser executada. Ela lê dados das tabelas `faturas_venda`, `clientes` и `pedidos_venda` para gerar estatísticas mensais.
+
+## Metadata:
+- Schema-Category: "Structural"
+- Impact-Level: "Low"
+- Requires-Backup: false
+- Reversible: true (a função pode ser removida com `DROP FUNCTION`)
+
+## Structure Details:
+- Function: `public.get_dashboard_stats()`
+
+## Security Implications:
+- RLS Status: A função será executada com os privilégios do usuário que a chama.
+- Policy Changes: No
+- Auth Requirements: `authenticated` role
+
+## Performance Impact:
+- Indexes: A performance depende dos índices nas colunas de data (`data_emissao`, `created_at`, `data_venda`).
+- Triggers: None
+- Estimated Impact: Baixo. A função executa algumas agregações, mas em subconjuntos de dados mensais, o que deve ser rápido com os índices corretos.
+*/
+CREATE OR REPLACE FUNCTION public.get_dashboard_stats()
+RETURNS TABLE(
+    faturamento_total_mes_atual NUMERIC,
+    faturamento_total_mes_anterior NUMERIC,
+    novos_clientes_mes_atual INT,
+    novos_clientes_mes_anterior INT,
+    pedidos_realizados_mes_atual INT,
+    pedidos_realizados_mes_anterior INT
+) AS $$
+DECLARE
+    current_month_start DATE := date_trunc('month', current_date);
+    current_month_end DATE := date_trunc('month', current_date) + interval '1 month' - interval '1 day';
+    prev_month_start DATE := date_trunc('month', current_date) - interval '1 month';
+    prev_month_end DATE := date_trunc('month', current_date) - interval '1 day';
+BEGIN
+    RETURN QUERY
+    SELECT
+        (SELECT COALESCE(SUM(valor_total), 0) FROM public.faturas_venda WHERE data_emissao >= current_month_start AND data_emissao <= current_month_end) AS faturamento_total_mes_atual,
+        (SELECT COALESCE(SUM(valor_total), 0) FROM public.faturas_venda WHERE data_emissao >= prev_month_start AND data_emissao <= prev_month_end) AS faturamento_total_mes_anterior,
+        (SELECT COUNT(*)::INT FROM public.clientes WHERE created_at >= current_month_start AND created_at <= current_month_end) AS novos_clientes_mes_atual,
+        (SELECT COUNT(*)::INT FROM public.clientes WHERE created_at >= prev_month_start AND created_at <= prev_month_end) AS novos_clientes_mes_anterior,
+        (SELECT COUNT(*)::INT FROM public.pedidos_venda WHERE data_venda >= current_month_start AND data_venda <= current_month_end) AS pedidos_realizados_mes_atual,
+        (SELECT COUNT(*)::INT FROM public.pedidos_venda WHERE data_venda >= prev_month_start AND data_venda <= prev_month_end) AS pedidos_realizados_mes_anterior;
+END;
+$$ LANGUAGE plpgsql;
+
+
+/*
+# [Function] get_faturamento_ultimos_12_meses
+Cria a função para buscar o faturamento dos últimos 12 meses.
+
+## Query Description:
+Esta operação cria uma nova função no banco de dados chamada `get_faturamento_ultimos_12_meses`. A função é segura e não modifica dados. Ela lê a tabela `faturas_venda` para agregar o faturamento mensal.
+
+## Metadata:
+- Schema-Category: "Structural"
+- Impact-Level: "Low"
+- Requires-Backup: false
+- Reversible: true (a função pode ser removida com `DROP FUNCTION`)
+
+## Structure Details:
+- Function: `public.get_faturamento_ultimos_12_meses()`
+
+## Security Implications:
+- RLS Status: A função será executada com os privilégios do usuário que a chama.
+- Policy Changes: No
+- Auth Requirements: `authenticated` role
+
+## Performance Impact:
+- Indexes: A performance depende de um índice na coluna `data_emissao` da tabela `faturas_venda`.
+- Triggers: None
+- Estimated Impact: Baixo. A função agrega dados ao longo de 12 meses, mas a junção com `generate_series` é eficiente.
+*/
+CREATE OR REPLACE FUNCTION public.get_faturamento_ultimos_12_meses()
+RETURNS TABLE(mes TEXT, faturamento NUMERIC) AS $$
+BEGIN
+    RETURN QUERY
+    WITH months AS (
+        SELECT generate_series(
+            date_trunc('month', current_date) - interval '11 months',
+            date_trunc('month', current_date),
+            '1 month'
+        )::date AS month_start
+    )
+    SELECT
+        to_char(m.month_start, 'Mon/YY') AS mes,
+        COALESCE(SUM(f.valor_total), 0)::NUMERIC AS faturamento
+    FROM months m
+    LEFT JOIN public.faturas_venda f
+        ON date_trunc('month', f.data_emissao) = m.month_start
+    GROUP BY m.month_start
+    ORDER BY m.month_start;
+END;
+$$ LANGUAGE plpgsql;

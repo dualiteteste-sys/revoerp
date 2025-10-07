@@ -1,0 +1,70 @@
+-- Habilita a Segurança em Nível de Linha (RLS) para todas as tabelas públicas.
+-- Isso é crucial para resolver os alertas de segurança críticos.
+ALTER TABLE public.empresas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.perfis ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.papeis ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.permissoes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.papel_permissoes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.usuario_papeis ENABLE ROW LEVEL SECURITY;
+-- Remove políticas antigas para garantir um estado limpo
+DROP POLICY IF EXISTS "Permitir acesso total a usuários com permissão" ON public.clientes;
+DROP POLICY IF EXISTS "Permitir acesso total a usuários com permissão" ON public.pessoas_contato;
+DROP POLICY IF EXISTS "Permitir acesso total a usuários com permissão" ON public.cliente_anexos;
+-- Novas Políticas de Segurança
+-- EMPRESAS: Usuários podem ver a empresa à qual pertencem.
+CREATE POLICY "Permitir leitura da própria empresa" ON public.empresas
+  FOR SELECT USING (
+    id = (SELECT empresa_id FROM public.perfis WHERE id = auth.uid())
+  );
+CREATE POLICY "Permitir atualização da própria empresa" ON public.empresas
+  FOR UPDATE USING (
+    id = (SELECT empresa_id FROM public.perfis WHERE id = auth.uid())
+  ) WITH CHECK (
+    id = (SELECT empresa_id FROM public.perfis WHERE id = auth.uid())
+  );
+-- PERFIS: Usuários podem ver seus próprios perfis. Admins podem ver todos.
+CREATE POLICY "Permitir leitura do próprio perfil" ON public.perfis
+  FOR SELECT USING (id = auth.uid());
+CREATE POLICY "Permitir que admins leiam todos os perfis" ON public.perfis
+  FOR SELECT USING (check_permission('configuracoes.gerenciar_usuarios'));
+-- PAPEIS E PERMISSÕES: Qualquer usuário autenticado pode ler.
+CREATE POLICY "Permitir leitura para usuários autenticados" ON public.papeis
+  FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "Permitir leitura para usuários autenticados" ON public.permissoes
+  FOR SELECT USING (auth.role() = 'authenticated');
+-- PAPEL_PERMISSOES E USUARIO_PAPEIS: Apenas admins podem gerenciar.
+CREATE POLICY "Permitir gerenciamento por admins" ON public.papel_permissoes
+  FOR ALL USING (check_permission('configuracoes.gerenciar_usuarios'))
+  WITH CHECK (check_permission('configuracoes.gerenciar_usuarios'));
+CREATE POLICY "Permitir gerenciamento por admins" ON public.usuario_papeis
+  FOR ALL USING (check_permission('configuracoes.gerenciar_usuarios'))
+  WITH CHECK (check_permission('configuracoes.gerenciar_usuarios'));
+-- CLIENTES: Acesso baseado em permissões.
+CREATE POLICY "Permitir acesso total baseado em permissões" ON public.clientes
+  FOR ALL USING (
+    (check_permission('clientes.ler') AND (SELECT pg_op() = 'SELECT')) OR
+    (check_permission('clientes.escrever') AND (SELECT pg_op() IN ('INSERT', 'UPDATE'))) OR
+    (check_permission('clientes.excluir') AND (SELECT pg_op() = 'DELETE'))
+  ) WITH CHECK (
+    (check_permission('clientes.escrever') AND (SELECT pg_op() IN ('INSERT', 'UPDATE'))) OR
+    (check_permission('clientes.excluir') AND (SELECT pg_op() = 'DELETE'))
+  );
+-- PESSOAS_CONTATO e CLIENTE_ANEXOS seguem as permissões de CLIENTES.
+CREATE POLICY "Permitir acesso total baseado em permissões de clientes" ON public.pessoas_contato
+  FOR ALL USING (
+    (check_permission('clientes.ler') AND (SELECT pg_op() = 'SELECT')) OR
+    (check_permission('clientes.escrever') AND (SELECT pg_op() IN ('INSERT', 'UPDATE'))) OR
+    (check_permission('clientes.excluir') AND (SELECT pg_op() = 'DELETE'))
+  ) WITH CHECK (
+    (check_permission('clientes.escrever') AND (SELECT pg_op() IN ('INSERT', 'UPDATE'))) OR
+    (check_permission('clientes.excluir') AND (SELECT pg_op() = 'DELETE'))
+  );
+CREATE POLICY "Permitir acesso total baseado em permissões de clientes" ON public.cliente_anexos
+  FOR ALL USING (
+    (check_permission('clientes.ler') AND (SELECT pg_op() = 'SELECT')) OR
+    (check_permission('clientes.escrever') AND (SELECT pg_op() IN ('INSERT', 'UPDATE'))) OR
+    (check_permission('clientes.excluir') AND (SELECT pg_op() = 'DELETE'))
+  ) WITH CHECK (
+    (check_permission('clientes.escrever') AND (SELECT pg_op() IN ('INSERT', 'UPDATE'))) OR
+    (check_permission('clientes.excluir') AND (SELECT pg_op() = 'DELETE'))
+  );

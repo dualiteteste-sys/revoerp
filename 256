@@ -1,0 +1,48 @@
+import { BaseRepository } from './BaseRepository';
+		import { ContaReceber, ContaReceberAnexo } from '../types';
+		import { snakeToCamel, camelToSnake } from '../lib/utils';
+
+		export class ContasReceberRepository extends BaseRepository<ContaReceber> {
+		  constructor() {
+		    super('contas_receber');
+		  }
+
+		  protected createEntity(data: any): ContaReceber {
+		    return data as ContaReceber;
+		  }
+
+		  async findAll(options: { page?: number; pageSize?: number } = {}): Promise<{ data: ContaReceber[]; count: number }> {
+		    console.warn('[Modo de Construção] Chamada para ContasReceberRepository.findAll bloqueada.');
+		    return { data: [], count: 0 };
+		  }
+
+		  async findByCompetencia(competencia: string): Promise<Pick<ContaReceber, 'id' | 'contratoId' | 'dataVencimento'>[]> {
+		    console.warn('[Modo de Construção] Chamada para ContasReceberRepository.findByCompetencia bloqueada.');
+		    return [];
+		  }
+
+		  async findById(id: string): Promise<ContaReceber | null> {
+		    console.warn('[Modo de Construção] Chamada para ContasReceberRepository.findById bloqueada.');
+		    return null;
+		  }
+		  
+		  async create(data: Partial<Omit<ContaReceber, 'id' | 'createdAt' | 'updatedAt'>>): Promise<ContaReceber> {
+		    console.warn('[Modo de Construção] Chamada para ContasReceberRepository.create bloqueada.');
+		    throw new Error("Funcionalidade desativada durante a reconstrução.");
+		  }
+
+		  async update(id: string, updates: Partial<ContaReceber>): Promise<ContaReceber> {
+		    console.warn('[Modo de Construção] Chamada para ContasReceberRepository.update bloqueada.');
+		    throw new Error("Funcionalidade desativada durante a reconstrução.");
+		  }
+
+		  async uploadAnexo(contaId: string, file: File): Promise<string> {
+		    console.warn('[Modo de Construção] Chamada para ContasReceberRepository.uploadAnexo bloqueada.');
+		    throw new Error("Funcionalidade desativada durante a reconstrução.");
+		  }
+
+		  async deleteAnexo(anexoId: string, filePath: string): Promise<void> {
+		    console.warn('[Modo de Construção] Chamada para ContasReceberRepository.deleteAnexo bloqueada.');
+		    throw new Error("Funcionalidade desativada durante a reconstrução.");
+		  }
+		}

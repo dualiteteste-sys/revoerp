@@ -1,0 +1,25 @@
+import { IConfiguracoesService } from './interfaces';
+		import { ConfiguracoesRepository } from '../repositories/ConfiguracoesRepository';
+		import { Empresa } from '../types/empresa';
+
+		export class ConfiguracoesService implements IConfiguracoesService {
+		  public repository: ConfiguracoesRepository;
+
+		  constructor(repository: ConfiguracoesRepository) {
+		    this.repository = repository;
+		  }
+
+		  async getEmpresaData(): Promise<Empresa | null> {
+		    return this.repository.findFirst();
+		  }
+
+		  async saveEmpresaData(data: Partial<Empresa>, logoFile?: File | null): Promise<Empresa> {
+		    let logoUrl = data.logoUrl;
+		    if (logoFile) {
+		      logoUrl = await this.repository.uploadLogo(logoFile);
+		    }
+		    
+		    const dataToSave = { ...data, logoUrl };
+		    return this.repository.upsert(dataToSave);
+		  }
+		}

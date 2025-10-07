@@ -1,0 +1,17 @@
+import { BaseRepository } from './BaseRepository';
+		import { FaturaVenda } from '../types';
+
+		export class NotaFiscalRepository extends BaseRepository<FaturaVenda> {
+		  constructor() {
+		    super('faturas_venda'); // Aponta para a mesma tabela de faturas
+		  }
+
+		  protected createEntity(data: any): FaturaVenda {
+		    return data as FaturaVenda;
+		  }
+
+		  async findAll(options: { page?: number; pageSize?: number } = {}): Promise<{ data: FaturaVenda[]; count: number }> {
+		    console.warn('[Modo de Construção] Chamada para NotaFiscalRepository.findAll bloqueada.');
+		    return { data: [], count: 0 };
+		  }
+		}

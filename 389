@@ -1,0 +1,74 @@
+/*
+		          # [ADJUST RLS POLICIES]
+		          Ajusta as políticas de segurança para permitir acesso anônimo ao CRUD de clientes.
+
+		          ## Query Description: [Esta operação altera as políticas de segurança (RLS) das tabelas relacionadas a clientes (`clientes`, `pessoas_contato`, `cliente_anexos`) para permitir que usuários não autenticados (anônimos) possam ler, criar, atualizar e excluir registros. Isso é necessário porque o sistema de login foi temporariamente desativado no frontend.]
+		          
+		          ## Metadata:
+		          - Schema-Category: ["Security"]
+		          - Impact-Level: ["Medium"]
+		          - Requires-Backup: [false]
+		          - Reversible: [true]
+		          
+		          ## Structure Details:
+		          - Tabelas Afetadas: public.clientes, public.pessoas_contato, public.cliente_anexos
+		          
+		          ## Security Implications:
+		          - RLS Status: [Enabled]
+		          - Policy Changes: [Yes]
+		          - Auth Requirements: [Temporariamente removido para as tabelas de clientes]
+		          
+		          ## Performance Impact:
+		          - Indexes: [N/A]
+		          - Triggers: [N/A]
+		          - Estimated Impact: [Nenhum impacto de performance esperado.]
+		          */
+
+		-- Habilita RLS (Row Level Security) para as tabelas, garantindo que as políticas sejam aplicadas.
+		ALTER TABLE public.clientes ENABLE ROW LEVEL SECURITY;
+		ALTER TABLE public.pessoas_contato ENABLE ROW LEVEL SECURITY;
+		ALTER TABLE public.cliente_anexos ENABLE ROW LEVEL SECURITY;
+
+		-- Remove políticas antigas para evitar conflitos.
+		DROP POLICY IF EXISTS "Permitir acesso de leitura para todos" ON public.clientes;
+		DROP POLICY IF EXISTS "Permitir acesso total para todos" ON public.clientes;
+		DROP POLICY IF EXISTS "Permitir acesso de leitura para todos" ON public.pessoas_contato;
+		DROP POLICY IF EXISTS "Permitir acesso total para todos" ON public.pessoas_contato;
+		DROP POLICY IF EXISTS "Permitir acesso de leitura para todos" ON public.cliente_anexos;
+		DROP POLICY IF EXISTS "Permitir acesso total para todos" ON public.cliente_anexos;
+
+		-- Cria uma nova política que permite que QUALQUER usuário (autenticado ou anônimo) leia os dados da tabela.
+		CREATE POLICY "Permitir acesso de leitura para todos"
+		ON public.clientes
+		FOR SELECT
+		USING (true);
+
+		-- Cria uma nova política que permite que QUALQUER usuário (autenticado ou anônimo) insira, atualize ou delete dados.
+		CREATE POLICY "Permitir acesso total para todos"
+		ON public.clientes
+		FOR ALL
+		USING (true)
+		WITH CHECK (true);
+
+		-- Repete as políticas para as tabelas relacionadas
+		CREATE POLICY "Permitir acesso de leitura para todos"
+		ON public.pessoas_contato
+		FOR SELECT
+		USING (true);
+
+		CREATE POLICY "Permitir acesso total para todos"
+		ON public.pessoas_contato
+		FOR ALL
+		USING (true)
+		WITH CHECK (true);
+
+		CREATE POLICY "Permitir acesso de leitura para todos"
+		ON public.cliente_anexos
+		FOR SELECT
+		USING (true);
+
+		CREATE POLICY "Permitir acesso total para todos"
+		ON public.cliente_anexos
+		FOR ALL
+		USING (true)
+		WITH CHECK (true);

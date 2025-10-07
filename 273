@@ -1,0 +1,12 @@
+import { supabase } from '../lib/supabaseClient';
+		import { DREMensal } from '../types';
+		import { snakeToCamel } from '../lib/utils';
+
+		export class RelatorioRepository {
+		  protected supabase = supabase;
+
+		  async getDREMensal(): Promise<DREMensal[]> {
+		    console.warn('[Modo de Construção] Chamada para RelatorioRepository.getDREMensal bloqueada.');
+		    return [];
+		  }
+		}

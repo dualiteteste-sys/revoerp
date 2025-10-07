@@ -1,0 +1,45 @@
+import { BaseRepository } from './BaseRepository';
+		import { OrdemServico, OrdemServicoItem, OrdemServicoAnexo, Vendedor } from '../types';
+		import { camelToSnake, snakeToCamel } from '../lib/utils';
+
+		export class OrdemServicoRepository extends BaseRepository<OrdemServico> {
+		  constructor() {
+		    super('ordens_servico');
+		  }
+
+		  protected createEntity(data: Omit<OrdemServico, 'id' | 'createdAt' | 'updatedAt'>): OrdemServico {
+		    return {
+		      ...data,
+		      id: '',
+		      createdAt: new Date(),
+		      updatedAt: new Date(),
+		      itens: [],
+		      anexos: [],
+		      totalServicos: 0,
+		      orcar: false,
+		      status: data.status || 'ABERTA',
+		      prioridade: data.prioridade || 'MEDIA',
+		      dataInicio: new Date(),
+		    };
+		  }
+
+		  async findAll(): Promise<OrdemServico[]> {
+		    console.warn('[Modo de Construção] Chamada para OrdemServicoRepository.findAll bloqueada.');
+		    return [];
+		  }
+
+		  async findById(id: string): Promise<OrdemServico | null> {
+		    console.warn('[Modo de Construção] Chamada para OrdemServicoRepository.findById bloqueada.');
+		    return null;
+		  }
+
+		  async create(data: Partial<Omit<OrdemServico, 'id' | 'createdAt' | 'updatedAt'>>): Promise<OrdemServico> {
+		    console.warn('[Modo de Construção] Chamada para OrdemServicoRepository.create bloqueada.');
+		    throw new Error("Funcionalidade desativada durante a reconstrução.");
+		  }
+
+		  async update(id: string, updates: Partial<OrdemServico>): Promise<OrdemServico> {
+		    console.warn('[Modo de Construção] Chamada para OrdemServicoRepository.update bloqueada.');
+		    throw new Error("Funcionalidade desativada durante a reconstrução.");
+		  }
+		}

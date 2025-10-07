@@ -1,0 +1,87 @@
+DO $$
+DECLARE
+    cliente_id_1 UUID;
+    cliente_id_2 UUID;
+    cliente_id_3 UUID;
+    cliente_id_4 UUID;
+    cliente_id_5 UUID;
+BEGIN
+    -- Inserir Cliente 1 (Pessoa Física)
+    INSERT INTO public.clientes (
+        codigo, nome, tipo_pessoa, cpf_cnpj, rg, contribuinte_icms, is_cliente, is_fornecedor, is_transportadora,
+        logradouro, numero, complemento, bairro, cep, cidade, estado, pais,
+        celular, email, email_nfe, site,
+        estado_civil, profissao, sexo, data_nascimento, naturalidade, status_crm, limite_credito, observacoes
+    ) VALUES (
+        'C001', 'João da Silva', 'FISICA', '123.456.789-01', '12.345.678-9', '9 - Não Contribuinte, que pode ou não possuir Inscrição Estadual no Cadastro de Contribuintes do ICMS', true, false, false,
+        'Rua das Flores', '123', 'Apto 45', 'Jardim Primavera', '12345-678', 'São Paulo', 'SP', 'Brasil',
+        '(11) 98765-4321', 'joao.silva@example.com', 'nfe.joao@example.com', 'https://joaosilva.dev',
+        'Casado(a)', 'Engenheiro de Software', 'Masculino', '1985-05-20', 'São Paulo', 'Cliente', 5000.00, 'Cliente antigo, bom pagador.'
+    ) RETURNING id INTO cliente_id_1;
+
+    -- Inserir Cliente 2 (Pessoa Jurídica)
+    INSERT INTO public.clientes (
+        codigo, nome, nome_fantasia, tipo_pessoa, cpf_cnpj, inscricao_estadual, contribuinte_icms, is_cliente, is_fornecedor, is_transportadora,
+        logradouro, numero, bairro, cep, cidade, estado, pais,
+        celular, email,
+        status_crm, limite_credito, observacoes
+    ) VALUES (
+        'F001', 'Comércio de Peças de TI Ltda', 'TecnoPeças', 'JURIDICA', '01.234.567/0001-89', '123.456.789.112', '1 - Contribuinte ICMS', true, true, false,
+        'Avenida Principal', '1000', 'Centro', '98765-432', 'Rio de Janeiro', 'RJ', 'Brasil',
+        '(21) 99999-8888', 'contato@tecnopecas.com.br',
+        'Prospect', 25000.00, 'Fornecedor de hardware. Ótimos preços.'
+    ) RETURNING id INTO cliente_id_2;
+
+    -- Inserir Cliente 3 (Pessoa Física)
+    INSERT INTO public.clientes (
+        codigo, nome, tipo_pessoa, cpf_cnpj, contribuinte_icms, is_cliente, is_fornecedor, is_transportadora,
+        logradouro, numero, bairro, cep, cidade, estado, pais,
+        celular, email,
+        status_crm, limite_credito
+    ) VALUES (
+        'C003', 'Maria Oliveira', 'FISICA', '987.654.321-09', '9 - Não Contribuinte, que pode ou não possuir Inscrição Estadual no Cadastro de Contribuintes do ICMS', true, false, false,
+        'Rua da Paz', '456', 'Vila Sônia', '54321-876', 'Belo Horizonte', 'MG', 'Brasil',
+        '(31) 91234-5678', 'maria.o@example.com',
+        'Lead', 1500.00
+    ) RETURNING id INTO cliente_id_3;
+
+    -- Inserir Cliente 4 (Pessoa Jurídica - Transportadora)
+    INSERT INTO public.clientes (
+        codigo, nome, nome_fantasia, tipo_pessoa, cpf_cnpj, inscricao_estadual, contribuinte_icms, is_cliente, is_fornecedor, is_transportadora,
+        logradouro, numero, bairro, cep, cidade, estado, pais,
+        celular, email, site
+    ) VALUES (
+        'T001', 'Transportes Rápidos Brasil S.A.', 'TransFast', 'JURIDICA', '98.765.432/0001-10', '987.654.321.111', '1 - Contribuinte ICMS', false, false, true,
+        'Rodovia dos Bandeirantes', 'km 50', 'Distrito Industrial', '13201-000', 'Jundiaí', 'SP', 'Brasil',
+        '(11) 98888-7777', 'operacional@transfast.com.br', 'https://transfastlog.com.br'
+    ) RETURNING id INTO cliente_id_4;
+
+    -- Inserir Cliente 5 (Pessoa Física - Cliente e Fornecedor)
+    INSERT INTO public.clientes (
+        codigo, nome, tipo_pessoa, cpf_cnpj, contribuinte_icms, is_cliente, is_fornecedor, is_transportadora,
+        logradouro, numero, complemento, bairro, cep, cidade, estado, pais,
+        celular, email,
+        profissao, sexo, data_nascimento, status_crm, limite_credito, observacoes
+    ) VALUES (
+        'CF001', 'Carlos Souza', 'FISICA', '111.222.333-44', '2 - Contribuinte isento de Inscrição no cadastro de Contribuintes do ICMS', true, true, false,
+        'Travessa dos Artistas', '78', 'Casa B', '22334-455', 'Curitiba', 'PR', 'Brasil',
+        '(41) 97654-1234', 'carlos.souza.design@example.com',
+        'Designer Gráfico', 'Masculino', '1990-11-10', 'Cliente', 10000.00, 'Cliente e fornecedor de serviços de design.'
+    ) RETURNING id INTO cliente_id_5;
+
+    -- Inserir Pessoas de Contato
+    INSERT INTO public.pessoas_contato (cliente_id, nome, setor, email, telefone) VALUES
+    (cliente_id_1, 'Ana Silva', 'Financeiro', 'ana.financeiro@example.com', '(11) 98765-4322'),
+    (cliente_id_2, 'Roberto Mendes', 'Compras', 'roberto.compras@tecnopecas.com.br', '(21) 99999-8889'),
+    (cliente_id_2, 'Fernanda Costa', 'Vendas', 'fernanda.vendas@tecnopecas.com.br', '(21) 99999-8890'),
+    (cliente_id_5, 'Carlos Souza', 'Principal', 'carlos.souza.design@example.com', '(41) 97654-1234');
+
+    -- Inserir Anexos (Simulados)
+    INSERT INTO public.cliente_anexos (cliente_id, nome_arquivo, path, tamanho, tipo) VALUES
+    (cliente_id_1, 'doc_identidade.jpg', 'placeholders/doc1.jpg', 102400, 'image/jpeg'),
+    (cliente_id_2, 'contrato_social.pdf', 'placeholders/doc2.pdf', 512000, 'application/pdf'),
+    (cliente_id_3, 'comprovante_residencia.png', 'placeholders/doc3.png', 204800, 'image/png'),
+    (cliente_id_4, 'licenca_transporte.pdf', 'placeholders/doc4.pdf', 819200, 'application/pdf'),
+    (cliente_id_5, 'portfolio.pdf', 'placeholders/doc5.pdf', 1228800, 'application/pdf');
+
+END $$;

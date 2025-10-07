@@ -1,0 +1,31 @@
+import { BaseRepository } from './BaseRepository';
+		import { OrdemCompra, OrdemCompraItem } from '../types';
+		import { camelToSnake, snakeToCamel } from '../lib/utils';
+
+		export class OrdemCompraRepository extends BaseRepository<OrdemCompra> {
+		  constructor() {
+		    super('ordens_compra');
+		  }
+
+		  protected createEntity(data: any): OrdemCompra {
+		    return data as OrdemCompra;
+		  }
+
+		  async findAll(options: { page?: number; pageSize?: number } = {}): Promise<{ data: OrdemCompra[]; count: number }> {
+		    console.warn('[Modo de Construção] Chamada para OrdemCompraRepository.findAll bloqueada.');
+		    return { data: [], count: 0 };
+		  }
+
+		  async createWithItems(
+		    ordemData: Partial<Omit<OrdemCompra, 'id' | 'createdAt' | 'updatedAt'>>,
+		    itensData: Omit<OrdemCompraItem, 'id' | 'createdAt' | 'updatedAt' | 'ordemCompraId'>[]
+		  ): Promise<OrdemCompra> {
+		    console.warn('[Modo de Construção] Chamada para OrdemCompraRepository.createWithItems bloqueada.');
+		    throw new Error("Funcionalidade desativada durante a reconstrução.");
+		  }
+
+		  async findById(id: string): Promise<OrdemCompra | null> {
+		    console.warn('[Modo de Construção] Chamada para OrdemCompraRepository.findById bloqueada.');
+		    return null;
+		  }
+		}

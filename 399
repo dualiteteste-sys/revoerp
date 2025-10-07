@@ -1,0 +1,253 @@
+-- Habilita a extensão pgcrypto se ainda não estiver habilitada
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- Tabela para armazenar os dados da empresa (tenant)
+CREATE TABLE IF NOT EXISTS public.empresas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    razao_social TEXT NOT NULL,
+    nome_completo TEXT,
+    fantasia TEXT,
+    cep TEXT,
+    logradouro TEXT,
+    numero TEXT,
+    sem_numero BOOLEAN DEFAULT false,
+    complemento TEXT,
+    bairro TEXT,
+    cidade TEXT,
+    uf TEXT,
+    fone TEXT,
+    fax TEXT,
+    celular TEXT,
+    email TEXT,
+    website TEXT,
+    segmento TEXT,
+    tipo_pessoa TEXT,
+    cnpj TEXT UNIQUE,
+    cpf TEXT UNIQUE,
+    ie TEXT,
+    ie_isento BOOLEAN DEFAULT false,
+    im TEXT,
+    cnae TEXT,
+    crt TEXT,
+    preferencias_contato JSONB,
+    administrador JSONB,
+    logo_url TEXT
+);
+COMMENT ON TABLE public.empresas IS 'Armazena os dados da(s) empresa(s) que utilizam o sistema (tenants).';
+
+-- Tabela de Clientes e Fornecedores
+CREATE TYPE public.tipo_pessoa AS ENUM ('FISICA', 'JURIDICA', 'ESTRANGEIRO');
+CREATE TYPE public.contribuinte_icms AS ENUM ('CONTRIBUINTE', 'CONTRIBUINTE_ISENTO', 'NAO_CONTRIBUINTE');
+
+CREATE TABLE IF NOT EXISTS public.clientes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    empresa_id UUID REFERENCES public.empresas(id) ON DELETE CASCADE,
+    codigo TEXT,
+    nome TEXT NOT NULL,
+    nome_fantasia TEXT,
+    tipo_pessoa tipo_pessoa DEFAULT 'FISICA',
+    cpf_cnpj TEXT,
+    rg TEXT,
+    inscricao_estadual TEXT,
+    inscricao_municipal TEXT,
+    contribuinte_icms contribuinte_icms DEFAULT 'NAO_CONTRIBUINTE',
+    is_cliente BOOLEAN DEFAULT true,
+    is_fornecedor BOOLEAN DEFAULT false,
+    is_transportadora BOOLEAN DEFAULT false,
+    logradouro TEXT,
+    numero TEXT,
+    complemento TEXT,
+    bairro TEXT,
+    cep TEXT,
+    cidade TEXT,
+    estado TEXT,
+    pais TEXT DEFAULT 'Brasil',
+    cobranca_logradouro TEXT,
+    cobranca_numero TEXT,
+    cobranca_complemento TEXT,
+    cobranca_bairro TEXT,
+    cobranca_cep TEXT,
+    cobranca_cidade TEXT,
+    cobranca_estado TEXT,
+    telefone_adicional TEXT,
+    celular TEXT,
+    email TEXT,
+    email_nfe TEXT,
+    site TEXT,
+    estado_civil TEXT,
+    profissao TEXT,
+    sexo TEXT,
+    data_nascimento DATE,
+    naturalidade TEXT,
+    status_crm TEXT,
+    condicao_pagamento_padrao_id TEXT,
+    limite_credito NUMERIC,
+    observacoes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+COMMENT ON TABLE public.clientes IS 'Cadastro de Clientes, Fornecedores e Transportadoras.';
+
+-- Tabela de Perfis de Usuário
+CREATE TABLE IF NOT EXISTS public.perfis (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    empresa_id UUID REFERENCES public.empresas(id) ON DELETE SET NULL,
+    nome_completo TEXT,
+    cpf TEXT,
+    avatar_url TEXT
+);
+COMMENT ON TABLE public.perfis IS 'Tabela de perfis para usuários do sistema, estendendo auth.users.';
+
+-- Tabela de Papéis (Funções)
+CREATE TABLE IF NOT EXISTS public.papeis (
+    id SERIAL PRIMARY KEY,
+    nome TEXT NOT NULL UNIQUE
+);
+COMMENT ON TABLE public.papeis IS 'Define os papéis (funções) de acesso, como Administrador, Vendedor, etc.';
+
+-- Tabela de Permissões
+CREATE TABLE IF NOT EXISTS public.permissoes (
+    id TEXT PRIMARY KEY,
+    descricao TEXT
+);
+COMMENT ON TABLE public.permissoes IS 'Catálogo de todas as permissões granulares do sistema (ex: clientes.criar).';
+
+-- Tabela de Junção: Papel <-> Permissões
+CREATE TABLE IF NOT EXISTS public.papel_permissoes (
+    papel_id INTEGER REFERENCES public.papeis(id) ON DELETE CASCADE,
+    permissao_id TEXT REFERENCES public.permissoes(id) ON DELETE CASCADE,
+    PRIMARY KEY (papel_id, permissao_id)
+);
+COMMENT ON TABLE public.papel_permissoes IS 'Tabela de junção para associar permissões a papéis.';
+
+-- Tabela de Junção: Usuário <-> Papéis
+CREATE TABLE IF NOT EXISTS public.usuario_papeis (
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    papel_id INTEGER REFERENCES public.papeis(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, papel_id)
+);
+COMMENT ON TABLE public.usuario_papeis IS 'Tabela de junção para associar papéis a usuários.';
+
+-- Gatilho para criar um perfil de usuário automaticamente
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+DECLARE
+  empresa_padrao_id UUID;
+  is_first_user BOOLEAN;
+  admin_papel_id INTEGER;
+  membro_papel_id INTEGER;
+BEGIN
+  SELECT id INTO empresa_padrao_id FROM public.empresas ORDER BY created_at LIMIT 1;
+  INSERT INTO public.perfis (id, empresa_id, nome_completo, cpf)
+  VALUES (new.id, empresa_padrao_id, new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'cpf_cnpj');
+  
+  SELECT count(*) = 1 INTO is_first_user FROM auth.users;
+  SELECT id INTO admin_papel_id FROM public.papeis WHERE nome = 'Admin';
+  SELECT id INTO membro_papel_id FROM public.papeis WHERE nome = 'Membro';
+  
+  IF is_first_user THEN
+    INSERT INTO public.usuario_papeis (user_id, papel_id) VALUES (new.id, admin_papel_id);
+  ELSE
+    INSERT INTO public.usuario_papeis (user_id, papel_id) VALUES (new.id, membro_papel_id);
+  END IF;
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+ALTER FUNCTION public.handle_new_user() SET search_path = public;
+
+-- Cria o trigger que chama a função acima após a criação de um usuário.
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Funções de verificação de permissão
+CREATE OR REPLACE FUNCTION public.check_permission(permission_to_check TEXT)
+RETURNS BOOLEAN AS $$
+DECLARE
+  has_permission BOOLEAN;
+BEGIN
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.usuario_papeis up
+    JOIN public.papel_permissoes pp ON up.papel_id = pp.papel_id
+    WHERE up.user_id = auth.uid()
+    AND pp.permissao_id = permission_to_check
+  ) INTO has_permission;
+  RETURN has_permission;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+ALTER FUNCTION public.check_permission(TEXT) SET search_path = public;
+
+CREATE OR REPLACE FUNCTION public.get_user_permissions(p_user_id UUID)
+RETURNS TABLE(permission_id TEXT) AS $$
+BEGIN
+  RETURN QUERY
+    SELECT pp.permissao_id
+    FROM public.usuario_papeis up
+    JOIN public.papel_permissoes pp ON up.papel_id = pp.papel_id
+    WHERE up.user_id = p_user_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+ALTER FUNCTION public.get_user_permissions(UUID) SET search_path = public;
+
+-- Inserção de dados iniciais (Papéis e Permissões)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.papeis) THEN
+    INSERT INTO public.papeis (nome) VALUES ('Admin'), ('Membro');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.permissoes) THEN
+    INSERT INTO public.permissoes (id, descricao) VALUES
+      ('clientes.ler', 'Visualizar clientes'),
+      ('clientes.escrever', 'Criar/editar clientes'),
+      ('clientes.excluir', 'Excluir clientes'),
+      ('configuracoes.gerenciar_usuarios', 'Gerenciar usuários e permissões');
+  END IF;
+END $$;
+
+-- Associa permissões iniciais ao papel de Admin
+DO $$
+DECLARE
+  admin_id INTEGER;
+BEGIN
+  SELECT id INTO admin_id FROM public.papeis WHERE nome = 'Admin';
+  IF admin_id IS NOT NULL THEN
+    INSERT INTO public.papel_permissoes (papel_id, permissao_id)
+    SELECT admin_id, id FROM public.permissoes
+    ON CONFLICT (papel_id, permissao_id) DO NOTHING;
+  END IF;
+END $$;
+
+-- Habilita RLS e cria políticas de segurança
+ALTER TABLE public.empresas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.clientes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.perfis ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.papeis ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.permissoes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.papel_permissoes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.usuario_papeis ENABLE ROW LEVEL SECURITY;
+
+-- Políticas de Segurança
+DROP POLICY IF EXISTS "Permitir acesso total para usuários autenticados" ON public.empresas;
+CREATE POLICY "Permitir acesso total para usuários autenticados" ON public.empresas FOR ALL USING (auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "Permitir acesso total baseado em permissão" ON public.clientes;
+CREATE POLICY "Permitir acesso total baseado em permissão" ON public.clientes FOR ALL USING (public.check_permission('clientes.ler')) WITH CHECK (public.check_permission('clientes.escrever'));
+
+DROP POLICY IF EXISTS "Permitir acesso total para admins" ON public.perfis;
+CREATE POLICY "Permitir acesso total para admins" ON public.perfis FOR ALL USING (public.check_permission('configuracoes.gerenciar_usuarios'));
+
+DROP POLICY IF EXISTS "Permitir acesso total para admins" ON public.papeis;
+CREATE POLICY "Permitir acesso total para admins" ON public.papeis FOR ALL USING (public.check_permission('configuracoes.gerenciar_usuarios'));
+
+DROP POLICY IF EXISTS "Permitir acesso total para admins" ON public.permissoes;
+CREATE POLICY "Permitir acesso total para admins" ON public.permissoes FOR ALL USING (public.check_permission('configuracoes.gerenciar_usuarios'));
+
+DROP POLICY IF EXISTS "Permitir acesso total para admins" ON public.papel_permissoes;
+CREATE POLICY "Permitir acesso total para admins" ON public.papel_permissoes FOR ALL USING (public.check_permission('configuracoes.gerenciar_usuarios'));
+
+DROP POLICY IF EXISTS "Permitir acesso total para admins" ON public.usuario_papeis;
+CREATE POLICY "Permitir acesso total para admins" ON public.usuario_papeis FOR ALL USING (public.check_permission('configuracoes.gerenciar_usuarios'));

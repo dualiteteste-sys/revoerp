@@ -1,0 +1,26 @@
+import React, { ReactNode } from 'react';
+import { SidebarProvider } from './SidebarContext';
+import { PdvProvider } from './PdvContext';
+import { ConfiguracoesProvider } from './ConfiguracoesContext';
+import { ServiceProvider } from './ServiceContext';
+import { AuthProvider } from './AuthContext';
+import { ProfileProvider } from './ProfileContext'; // Importa o novo provider
+
+const providers = [
+  AuthProvider,
+  ProfileProvider, // Adiciona o ProfileProvider logo após o AuthProvider
+  ServiceProvider,
+  SidebarProvider,
+  PdvProvider,
+  ConfiguracoesProvider,
+];
+
+export const AppProviders: React.FC<AppProvidersProps> = ({ children }) => {
+  return providers.reduceRight((acc, Provider) => {
+    return <Provider>{acc}</Provider>;
+  }, <>{children}</>);
+};
+
+interface AppProvidersProps {
+  children: ReactNode;
+}
